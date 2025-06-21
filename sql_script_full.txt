@@ -1,0 +1,47 @@
+-- Bảng danh mục sản phẩm (Categories)
+CREATE TABLE categories (
+  id SERIAL PRIMARY KEY, 
+  name VARCHAR(100) NOT NULL UNIQUE,  -- Tên danh mục (duy nhất)
+  description TEXT,
+  slug VARCHAR(150) UNIQUE;
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+
+-- Bảng sản phẩm (Products)
+CREATE TABLE products (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  
+  price NUMERIC(10,2) NOT NULL,         -- Giá cơ bản của sản phẩm
+  category_id INT REFERENCES categories(id) ON DELETE SET NULL,  -- FK tới danh mục
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+
+-- Bảng hình ảnh sản phẩm (Product Images)
+CREATE TABLE product_images (
+  id SERIAL PRIMARY KEY,
+  product_id INT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  image_url TEXT NOT NULL,              -- Đường dẫn hoặc URL hình ảnh
+  sort_order INT NOT NULL,              -- Thứ tự sắp xếp ảnh cho sản phẩm
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  CONSTRAINT unique_product_image_order UNIQUE(product_id, sort_order)
+);
+
+
+-- Bảng biến thể sản phẩm (Product Variants)
+CREATE TABLE product_variants (
+  id SERIAL PRIMARY KEY,
+  product_id INT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  color VARCHAR(50) NOT NULL,
+  size VARCHAR(50) NOT NULL,
+  price_override NUMERIC(10,2),   -- Giá thay thế nếu biến thể có giá khác
+  stock INT DEFAULT 0,            -- Tồn kho cho biến thể này
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  CONSTRAINT unique_product_variant UNIQUE(product_id, color, size)
+);

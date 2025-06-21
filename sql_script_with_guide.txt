@@ -1,0 +1,198 @@
+Hoàn Thiện Schema SQL Chuẩn hóa cho Hệ Thống Bán Hàng (Supabase & NextJS)
+Dưới đây là toàn bộ script SQL tạo schema cơ sở dữ liệu đã chuẩn hóa cho hệ thống bán dép (sandal) trên Supabase (PostgreSQL), đáp ứng đầy đủ các yêu cầu đề ra. Mỗi bảng đều có khóa chính (PRIMARY KEY), khóa ngoại (FOREIGN KEY) phù hợp, cùng các cột cần thiết (bao gồm timestamp) và các ràng buộc (UNIQUE, CHECK) đảm bảo tính toàn vẹn dữ liệu. Schema sử dụng kiểu UUID cho khóa chính của bảng users để tương thích với hệ thống Auth của Supabase
+supabase.com
+.
+Bảng users – Thông Tin Người Dùng và Phân Quyền
+Bảng users lưu trữ thông tin người dùng, bao gồm phân quyền user/admin. Sử dụng cột id kiểu UUID làm khóa chính và tự động sinh giá trị (UUID v4)
+supabase.com
+. Bảng có cột email duy nhất để đảm bảo không trùng lặp tài khoản
+bgiri-gcloud.medium.com
+, mật khẩu (hoặc hash mật khẩu) và cột role xác định quyền hạn. Ràng buộc CHECK trên role giới hạn giá trị chỉ là 'user' hoặc 'admin'. Các cột created_at và updated_at phục vụ theo dõi thời gian tạo và cập nhật người dùng.
+sql
+Copy
+Edit
+-- Bảng người dùng (Users)
+CREATE TABLE users (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),  -- Khóa chính, UUID tự sinh:contentReference[oaicite:3]{index=3}
+  email VARCHAR(100) NOT NULL UNIQUE,             -- Email đăng ký (duy nhất):contentReference[oaicite:4]{index=4}
+  password_hash VARCHAR(255) NOT NULL,            -- Mật khẩu đã mã hóa
+  role VARCHAR(10) NOT NULL DEFAULT 'user' CHECK (role IN ('user','admin')),  -- Phân quyền user/admin
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+Giải thích: Sử dụng UUID cho users.id giúp tích hợp với Supabase Auth một cách trơn tru. Email được đánh dấu UNIQUE để không có hai người dùng trùng email
+bgiri-gcloud.medium.com
+. Trường role chỉ cho phép giá trị 'user' hoặc 'admin' (mặc định 'user'). Timestamp dùng kiểu TIMESTAMP WITH TIME ZONE (theo chuẩn Supabase) và mặc định gán NOW() khi tạo.
+Bảng categories – Danh Mục Sản Phẩm
+Bảng categories quản lý các danh mục sản phẩm (không có danh mục con). Mỗi danh mục có khóa chính là một số tự tăng (SERIAL). Các cột gồm tên danh mục (ví dụ: loại dép, giày) và mô tả (tuỳ chọn). Đảm bảo tên danh mục là duy nhất để tránh trùng lặp.
+sql
+Copy
+Edit
+-- Bảng danh mục sản phẩm (Categories)
+CREATE TABLE categories (
+  id SERIAL PRIMARY KEY, 
+  name VARCHAR(100) NOT NULL UNIQUE,  -- Tên danh mục (duy nhất)
+  description TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+Giải thích: Bảng này đơn giản gồm id, tên và mô tả. Khóa chính id dùng kiểu serial tự tăng. Đặt UNIQUE cho name để mỗi danh mục chỉ xuất hiện một lần. Liên kết: bảng products sẽ có khóa ngoại trỏ đến categories.id.
+Bảng products – Sản Phẩm
+Bảng products lưu thông tin sản phẩm dép. Mỗi sản phẩm có khóa chính tự tăng, tên, mô tả, giá cơ bản và số lượng tồn kho cơ bản. Sản phẩm liên kết với một danh mục qua khóa ngoại category_id. Bảng cũng có các cột thời gian tạo/cập nhật.
+sql
+Copy
+Edit
+-- Bảng sản phẩm (Products)
+CREATE TABLE products (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  price NUMERIC(10,2) NOT NULL,         -- Giá cơ bản của sản phẩm
+  category_id INT REFERENCES categories(id) ON DELETE SET NULL,  -- FK tới danh mục
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+Giải thích: Mỗi sản phẩm có một danh mục (có thể null nếu sản phẩm chưa phân loại). Sử dụng kiểu NUMERIC(10,2) cho giá để đảm bảo độ chính xác khi lưu tiền. Khi xóa một danh mục, ON DELETE SET NULL giúp không làm mất sản phẩm (có thể gán danh mục khác sau).
+Bảng product_images – Hình Ảnh Sản Phẩm
+Bảng product_images cho phép quản lý nhiều hình ảnh cho mỗi sản phẩm. Mỗi bản ghi chứa một product_id liên kết đến sản phẩm, URL hình ảnh, thứ tự sắp xếp (sort_order) và khóa chính tự tăng. Ràng buộc UNIQUE trên cặp (product_id, sort_order) đảm bảo không có hai ảnh trùng vị trí cho cùng một sản phẩm. (Có thể thêm cột đánh dấu ảnh chính nếu cần, ví dụ cột boolean is_main tương tự thiết kế trong nguồn tham khảo
+stackoverflow.com
+).
+sql
+Copy
+Edit
+-- Bảng hình ảnh sản phẩm (Product Images)
+CREATE TABLE product_images (
+  id SERIAL PRIMARY KEY,
+  product_id INT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  image_url TEXT NOT NULL,              -- Đường dẫn hoặc URL hình ảnh
+  sort_order INT NOT NULL,              -- Thứ tự sắp xếp ảnh cho sản phẩm
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  CONSTRAINT unique_product_image_order UNIQUE(product_id, sort_order)
+);
+Giải thích: Khi xóa một sản phẩm, tất cả ảnh liên quan sẽ được xóa theo (ON DELETE CASCADE) để tránh ảnh “mồ côi”. Cột sort_order cho phép sắp xếp ảnh, và ràng buộc duy nhất đảm bảo mỗi thứ tự chỉ dùng một lần trên mỗi sản phẩm. Thiết kế này tương tự bảng nối chứa product_id, sort_order trong hệ thống quản lý ảnh sản phẩm
+stackoverflow.com
+, giúp linh hoạt thêm nhiều ảnh cho một sản phẩm.
+Bảng product_variants – Biến Thể Sản Phẩm
+Bảng product_variants lưu các biến thể của sản phẩm, ví dụ các màu sắc và kích cỡ khác nhau của dép. Mỗi biến thể tham chiếu đến một sản phẩm qua product_id, và có thể có các thuộc tính riêng như màu, kích cỡ, giá điều chỉnh, và số lượng tồn kho cho biến thể đó. Khóa chính là một id tự tăng, và ràng buộc UNIQUE trên (product_id, color, size) để không lặp biến thể y hệt.
+sql
+Copy
+Edit
+-- Bảng biến thể sản phẩm (Product Variants)
+CREATE TABLE product_variants (
+  id SERIAL PRIMARY KEY,
+  product_id INT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  color VARCHAR(50) NOT NULL,
+  size VARCHAR(50) NOT NULL,
+  price_override NUMERIC(10,2),   -- Giá thay thế nếu biến thể có giá khác
+  stock INT DEFAULT 0,            -- Tồn kho cho biến thể này
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  CONSTRAINT unique_product_variant UNIQUE(product_id, color, size)
+);
+Giải thích: Khi một sản phẩm bị xóa, toàn bộ biến thể cũng được xóa (CASCADE) vì chúng phụ thuộc sản phẩm. Mỗi biến thể có thuộc tính màu (color) và cỡ (size). Có thể thêm cột price_override để ghi nhận giá khác (nếu màu/cỡ khác giá), nếu không thì dùng giá mặc định từ bảng products. Cột stock quản lý tồn kho từng biến thể. Ràng buộc UNIQUE đảm bảo không tồn tại hai biến thể trùng màu và cỡ cho cùng một sản phẩm.
+Bảng cart – Giỏ Hàng
+Bảng cart đại diện cho giỏ hàng của người dùng. Theo yêu cầu, mỗi user có một giỏ hàng duy nhất. Do đó, ta có thể dùng khóa ngoại user_id (kiểu UUID) trỏ sang users.id và đồng thời đặt nó UNIQUE để một user không có hai giỏ hàng. Khóa chính của bảng có thể chính là user_id (mỗi giỏ hàng gắn liền một user), hoặc một id tự tăng với user_id unique. Ở đây ta chọn dùng user_id làm khóa chính để ràng buộc trực tiếp 1-1 với users. Bảng cũng có cột created_at để lưu thời điểm tạo giỏ hàng.
+sql
+Copy
+Edit
+-- Bảng giỏ hàng (Cart)
+CREATE TABLE cart (
+  user_id UUID PRIMARY KEY REFERENCES users(id),  -- Mỗi user 1 giỏ hàng (PK đồng thời là FK)
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  -- (Không cần updated_at vì giỏ hàng chỉ lưu ID người dùng)
+);
+Giải thích: Bảng giỏ hàng rất đơn giản, chỉ gồm khóa chính cũng chính là mã user. Cách thiết kế này đảm bảo 1-1: một user chỉ có một giỏ. Nếu cần thêm cột khác (ví dụ trạng thái giỏ), có thể bổ sung. Mối quan hệ: cart.user_id khóa ngoại tham chiếu users.id. Không dùng ON DELETE CASCADE ở đây để tránh xóa giỏ hàng khi xóa người dùng một cách không kiểm soát (việc xóa user có thể bị chặn nếu còn dữ liệu liên quan như đơn hàng).
+Bảng cart_items – Sản Phẩm Trong Giỏ Hàng
+Bảng cart_items chứa các mục (sản phẩm cụ thể) trong giỏ hàng. Mỗi mục liên kết đến một giỏ (cart_id) và một biến thể sản phẩm (product_variant_id). Khóa chính có thể là một id tự tăng, kèm ràng buộc UNIQUE trên (cart_id, product_variant_id) để cùng một biến thể không xuất hiện hai lần trong một giỏ. Ngoài ra có cột quantity để lưu số lượng mỗi sản phẩm trong giỏ.
+sql
+Copy
+Edit
+-- Bảng mục giỏ hàng (Cart Items)
+CREATE TABLE cart_items (
+  id SERIAL PRIMARY KEY,
+  cart_id UUID NOT NULL REFERENCES cart(user_id) ON DELETE CASCADE,   -- FK tới giỏ hàng của user
+  product_variant_id INT NOT NULL REFERENCES product_variants(id) ON DELETE CASCADE,
+  quantity INT NOT NULL DEFAULT 1,            -- Số lượng sản phẩm trong giỏ
+  added_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  CONSTRAINT unique_cart_item UNIQUE(cart_id, product_variant_id)
+);
+Giải thích: Khi xóa giỏ hàng hoặc biến thể sản phẩm, các mục tương ứng cũng bị xóa (ON DELETE CASCADE). Ràng buộc duy nhất đảm bảo một sản phẩm (biến thể) chỉ có một dòng trong giỏ – nếu người dùng thêm tiếp cùng sản phẩm thì chỉ cần tăng quantity thay vì thêm dòng mới. Cột added_at lưu thời điểm sản phẩm được thêm vào giỏ.
+Bảng orders – Đơn Hàng
+Bảng orders lưu thông tin đơn hàng khi người dùng tiến hành thanh toán. Mỗi đơn hàng có khóa chính (số đơn hàng) tự tăng, và tham chiếu đến users.id để biết ai đặt. Bảng lưu địa chỉ giao hàng và thông tin liên hệ giao hàng trực tiếp (vì không có bảng địa chỉ riêng). Các cột như shipping_address, shipping_name, shipping_phone dùng để lưu địa chỉ người nhận. Thêm cột payment_method (phương thức thanh toán, ví dụ 'COD', 'credit_card'...), và trạng thái hiện tại của đơn (có thể suy ra từ lịch sử trạng thái, nhưng lưu ở đây để truy vấn nhanh). Cuối cùng, total_amount lưu tổng tiền của đơn hàng (để thuận tiện thay vì phải tính từ bảng order_items mỗi lần
+bgiri-gcloud.medium.com
+). Các cột timestamp giúp theo dõi thời gian đặt hàng và cập nhật trạng thái.
+sql
+Copy
+Edit
+-- Bảng đơn hàng (Orders)
+CREATE TABLE orders (
+  id SERIAL PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES users(id),      -- FK tới người đặt hàng
+  shipping_name TEXT NOT NULL,                     -- Tên người nhận hàng
+  shipping_address TEXT NOT NULL,                  -- Địa chỉ giao hàng (ghi trực tiếp)
+  shipping_phone VARCHAR(20),                      -- Số điện thoại người nhận
+  payment_method VARCHAR(50) NOT NULL,             -- Phương thức thanh toán (ví dụ: COD, thẻ tín dụng)
+  total_amount NUMERIC(10,2) NOT NULL,             -- Tổng tiền đơn hàng
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',   -- Trạng thái hiện tại của đơn hàng
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+Giải thích: Khi tạo đơn hàng, status mặc định là 'pending' (đang chờ xử lý). Không cho phép giá trị rỗng cho các thông tin giao hàng quan trọng. Trường payment_method lưu trực tiếp kiểu thanh toán, có thể thêm ràng buộc CHECK giới hạn tập giá trị hợp lệ nếu biết trước danh sách phương thức thanh toán. Tổng tiền được lưu trực tiếp để thuận tiện truy xuất (theo nguyên tắc phi chuẩn hóa có kiểm soát
+bgiri-gcloud.medium.com
+). Mỗi đơn hàng liên kết một người dùng; nếu xóa người dùng, ta có thể chọn giữ đơn (doanh nghiệp thường không xóa dữ liệu đơn hàng), nên không dùng ON DELETE CASCADE ở đây.
+Bảng order_items – Chi Tiết Đơn Hàng
+Bảng order_items lưu danh sách sản phẩm (biến thể) thuộc mỗi đơn hàng. Mỗi mục có khóa chính tự tăng, tham chiếu đến đơn hàng (order_id) và biến thể sản phẩm cụ thể (product_variant_id). Bảng cũng lưu số lượng và giá tại thời điểm đặt của mỗi mục. Ràng buộc UNIQUE trên (order_id, product_variant_id) để một sản phẩm chỉ xuất hiện một lần trong đơn (nếu mua nhiều số lượng thì gộp trong một dòng với cột quantity).
+sql
+Copy
+Edit
+-- Bảng chi tiết đơn hàng (Order Items)
+CREATE TABLE order_items (
+  id SERIAL PRIMARY KEY,
+  order_id INT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  product_variant_id INT NOT NULL REFERENCES product_variants(id),
+  quantity INT NOT NULL DEFAULT 1,
+  price NUMERIC(10,2) NOT NULL,    -- Đơn giá của sản phẩm tại thời điểm đặt
+  CONSTRAINT unique_order_product UNIQUE(order_id, product_variant_id)
+);
+Giải thích: Khi xóa đơn hàng, toàn bộ chi tiết cũng bị xóa (CASCADE) để giữ toàn vẹn dữ liệu. Cột price trong order_items chốt giá sản phẩm tại thời điểm mua, tránh ảnh hưởng nếu giá sản phẩm thay đổi sau này. Mối quan hệ: order_items liên kết orders (nhiều - một) và product_variants (nhiều - một). Ràng buộc duy nhất ngăn việc một sản phẩm lặp lại nhiều dòng trong cùng một đơn.
+Bảng order_status_history – Lịch Sử Trạng Thái Đơn Hàng
+Bảng order_status_history lưu lịch sử thay đổi trạng thái của mỗi đơn hàng. Mỗi lần đơn hàng chuyển trạng thái (ví dụ: từ pending sang paid, hay paid sang shipped), ta thêm một bản ghi vào bảng này. Bản ghi gồm mã tự tăng, mã đơn hàng, trạng thái mới và thời điểm thay đổi. Ràng buộc CHECK trên cột status giới hạn các giá trị hợp lệ (ví dụ: 'pending', 'paid', 'shipped', 'completed', v.v.).
+sql
+Copy
+Edit
+-- Bảng lịch sử trạng thái đơn hàng (Order Status History)
+CREATE TABLE order_status_history (
+  id SERIAL PRIMARY KEY,
+  order_id INT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  status VARCHAR(20) NOT NULL,
+  changed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  CHECK (status IN ('pending','paid','shipped','completed'))
+);
+Giải thích: Khi một đơn hàng bị xóa (ví dụ xóa dữ liệu do yêu cầu riêng), lịch sử trạng thái của nó cũng xóa theo để tránh dữ liệu mồ côi. Bảng này cho phép truy vết mọi thay đổi trạng thái, phục vụ việc quản lý đơn hàng. Các trạng thái hợp lệ được giới hạn trong tập quy định, ví dụ từ lúc tạo đến hoàn tất đơn hàng (pending, paid, shipped, completed, ...). Ràng buộc CHECK đảm bảo nhập liệu đúng (tránh sai chính tả trạng thái). Tùy nhu cầu thực tế có thể bổ sung trạng thái khác (như "cancelled", "refunded"), cũng như thêm cột ghi chú hoặc người thực hiện thay đổi nếu cần.
+Bảng reviews – Đánh Giá Sản Phẩm
+Bảng reviews cho phép người dùng đánh giá sản phẩm đã mua. Mỗi người dùng chỉ được đánh giá một lần cho mỗi sản phẩm, do đó thiết lập ràng buộc UNIQUE trên cặp (user_id, product_id). Khóa chính id tự tăng cho mỗi đánh giá. Bảng chứa khóa ngoại trỏ đến người dùng và sản phẩm, điểm đánh giá (rating từ 1 đến 5) và nội dung nhận xét (comment). Thêm ràng buộc CHECK đảm bảo rating nằm trong khoảng hợp lệ 1-5
+bgiri-gcloud.medium.com
+.
+sql
+Copy
+Edit
+-- Bảng đánh giá sản phẩm (Reviews)
+CREATE TABLE reviews (
+  id SERIAL PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  product_id INT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  rating INT NOT NULL CHECK (rating >= 1 AND rating <= 5),  -- Điểm đánh giá 1-5 sao:contentReference[oaicite:11]{index=11}
+  comment TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  CONSTRAINT unique_user_review UNIQUE(user_id, product_id)
+);
+Giải thích: Khi xóa người dùng hoặc sản phẩm, các đánh giá liên quan cũng bị xóa (ON DELETE CASCADE) để dữ liệu không còn tham chiếu trống. Ràng buộc unique_user_review ngăn một user đánh giá cùng một sản phẩm nhiều lần. Cột rating bắt buộc từ 1 đến 5; điều này được đảm bảo bởi ràng buộc CHECK tương tự ví dụ thiết kế trong tài liệu
+bgiri-gcloud.medium.com
+. Bảng reviews giúp lưu phản hồi từ khách hàng, hỗ trợ người quản trị theo dõi chất lượng sản phẩm.
+Tổng Kết
+Script trên tạo đầy đủ các bảng và ràng buộc cho hệ thống bán hàng dùng Supabase và NextJS, đảm bảo chuẩn hóa và toàn vẹn dữ liệu. Tất cả các khóa ngoại được thiết lập logic giữa các bảng (đúng chuẩn quan hệ trong PostgreSQL/Supabase). Ngoài ra, các cột thời gian (created_at, updated_at) được thêm vào những bảng thích hợp để phục vụ việc theo dõi và truy vấn. Việc sử dụng UUID cho users.id phù hợp với Supabase Auth, và các ràng buộc như UNIQUE, CHECK đã được áp dụng để đảm bảo tính nhất quán của dữ liệu (ví dụ: email người dùng duy nhất
+bgiri-gcloud.medium.com
+, điểm đánh giá 1-5
+bgiri-gcloud.medium.com
+, mỗi người chỉ có một giỏ hàng, v.v.). Schema này có thể chạy trực tiếp trên Supabase để khởi tạo cơ sở dữ liệu ban đầu cho ứng dụng.
