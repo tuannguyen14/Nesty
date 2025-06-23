@@ -1,0 +1,72 @@
++---app
+|   |   favicon.ico
+|   |   globals.css
+|   |   layout.tsx
+|   |   page.tsx
+|   |
+|   +---about
+|   |       page.tsx
+|   |
+|   +---admin
+|   |       page.tsx
+|   |
+|   +---login
+|   |       page.tsx
+|   |
+|   +---products
+|   |   |   page.tsx
+|   |   |
+|   |   +---[products]
+|   |   \---[slug]
+|   |           page.tsx
+|   |
+|   \---register
+|           page.tsx
+|
++---components
+|   +---admin
+|   |       ProductCard.tsx
+|   |       ProductForm.tsx
+|   |       ProductsGrid.tsx
+|   |       StatsCards.tsx
+|   |
+|   +---home
+|   |       CategoriesSection.tsx
+|   |       CTASection.tsx
+|   |       HeroSection.tsx
+|   |       ProductsSection.tsx
+|   |
+|   +---layout
+|   |       Footer.tsx
+|   |       Navbar.tsx
+|   |
+|   +---products
+|   |       ProductCard.tsx
+|   |       ProductsPageClient.tsx
+|   |
+|   \---ui
+|           alert.tsx
+|           badge.tsx
+|           button.tsx
+|           card.tsx
+|           input.tsx
+|           label.tsx
+|           Loading.tsx
+|           select.tsx
+|           separator.tsx
+|           tabs.tsx
+|
++---hooks
+|       useAuth.tsx
+|       useCart.ts
+|       useProductInfo.tsx
+|
++---lib
+|       supabase.ts
+|       utils.ts
+|
++---types
+|       product.ts
+|
+\---utils
+        colorUtils.ts

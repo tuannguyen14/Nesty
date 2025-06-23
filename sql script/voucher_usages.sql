@@ -1,0 +1,7 @@
+CREATE TABLE voucher_usages (
+  id SERIAL PRIMARY KEY,
+  voucher_id INT NOT NULL REFERENCES vouchers(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  order_id INT REFERENCES orders(id) ON DELETE SET NULL,
+  used_at TIMESTAMPTZ DEFAULT NOW()
+);

@@ -11,9 +11,12 @@ import StatsCards from '@/components/admin/StatsCards';
 import ProductsGrid from '@/components/admin/ProductsGrid';
 import Loading from '@/components/ui/Loading';
 
+import { useAuth } from '@/hooks/useAuth';
+
 export default function AdminPage() {
     const router = useRouter();
-    const [loading, setLoading] = useState(true);
+    const { user, loading } = useAuth();
+    const [loadingUI, setLoadingUI] = useState(true);
     const [isAdmin, setIsAdmin] = useState(false);
     const [products, setProducts] = useState<ProductWithDetails[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
@@ -22,22 +25,17 @@ export default function AdminPage() {
 
     // Kiểm tra role admin
     useEffect(() => {
+        if (loading) return;
+
         const checkAdmin = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
+            console.log('Checking admin role...');
+            console.log('Current user:', user);
             if (!user) {
                 router.push('/login');
                 return;
             }
 
-            const { data: profile, error } = await supabase
-                .from('users')
-                .select('role')
-                .eq('id', user.id)
-                .single();
-
-            console.log('Current user:', profile);
-
-            if (error || profile?.role !== 'admin') {
+            if (user?.role !== 'admin') {
                 alert('Bạn không có quyền truy cập trang này.');
                 router.push('/');
                 return;
@@ -45,11 +43,11 @@ export default function AdminPage() {
 
             setIsAdmin(true);
             await Promise.all([fetchProducts(), fetchCategories()]);
-            setLoading(false);
+            setLoadingUI(false);
         };
 
         checkAdmin();
-    }, [router]);
+    }, [user, loading, router]);
 
     // Lấy danh sách categories
     const fetchCategories = async () => {
@@ -94,7 +92,7 @@ export default function AdminPage() {
             if (error) {
                 throw error;
             }
-            
+
             await fetchProducts();
         } catch (error: any) {
             console.error('Lỗi xóa sản phẩm:', error);
@@ -127,7 +125,7 @@ export default function AdminPage() {
         setEditingProduct(null);
     };
 
-    if (loading) return <Loading />;
+    if (loadingUI) return <Loading />;
     if (!isAdmin) return null;
 
     return (
@@ -142,11 +140,10 @@ export default function AdminPage() {
                         </div>
                         <button
                             onClick={showForm ? handleFormCancel : handleAddProduct}
-                            className={`inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors ${
-                                showForm 
-                                    ? 'bg-gray-600 hover:bg-gray-700 focus:ring-gray-500' 
-                                    : 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500'
-                            }`}
+                            className={`inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors ${showForm
+                                ? 'bg-gray-600 hover:bg-gray-700 focus:ring-gray-500'
+                                : 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500'
+                                }`}
                         >
                             <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 {showForm ? (

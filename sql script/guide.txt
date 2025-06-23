@@ -1,0 +1,56 @@
+Thứ tự chạy SQL Scripts
+Bước 1: Tạo các bảng cơ sở (không có foreign key)
+bash
+1. user.sql                    # Tạo bảng users trước
+2. categories.sql              # Tạo bảng categories 
+3. vouchers.sql               # Tạo bảng vouchers
+
+Bước 2: Tạo các bảng phụ thuộc users
+bash
+4. cart.sql                   # Phụ thuộc users
+5. products.sql               # Phụ thuộc categories
+
+Bước 3: Tạo các bảng phụ thuộc products
+bash
+6. product_variants.sql       # Phụ thuộc products
+7. product_images.sql         # Phụ thuộc products
+8. reviews.sql               # Phụ thuộc users + products
+
+Bước 4: Tạo các bảng phụ thuộc nhiều bảng
+bash
+9. orders.sql                # Phụ thuộc users + vouchers
+10. orders_item.sql          # Phụ thuộc orders + product_variants
+11. voucher_usages.sql       # Phụ thuộc vouchers + users + orders
+
+Bước 5: Sửa cart_items (phải sau khi có cart và product_variants)
+bash
+12. cart_item.sql            # Phụ thuộc cart + product_variants
+    (nhưng cần sửa theo script fix)
+
+Bước 6: Tạo các trigger và function
+bash
+13. create_cart_for_user.sql # Trigger tạo cart cho user mới
+14. supabase_auth_trigger    # Trigger sync Supabase Auth
+
+Bước 7: Chạy script sửa đổi cuối cùng
+bash
+15. sql_fixes                # Script sửa các vấn đề còn lại
+
+⚠️ Lưu ý quan trọng:
+Nếu chạy lần đầu (database mới):
+
+Chạy từ 1 → 11
+Bỏ qua cart_item.sql gốc, dùng version đã sửa trong sql_fixes
+Chạy 13, 14, 15
+
+Nếu đã có database:
+
+Chỉ chạy script sql_fixes để update
+
+Thứ tự dependency:
+users → cart → cart_items
+categories → products → product_variants → order_items
+         → products → product_images
+         → products → reviews
+users + vouchers → orders → order_items
+                         → voucher_usages

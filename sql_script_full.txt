@@ -3,24 +3,25 @@ CREATE TABLE categories (
   id SERIAL PRIMARY KEY, 
   name VARCHAR(100) NOT NULL UNIQUE,  -- Tên danh mục (duy nhất)
   description TEXT,
-  slug VARCHAR(150) UNIQUE;
+  slug VARCHAR(150),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-
--- Bảng sản phẩm (Products)
+-- Bảng sản phẩm (products)
 CREATE TABLE products (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL,
   description TEXT,
-  
-  price NUMERIC(10,2) NOT NULL,         -- Giá cơ bản của sản phẩm
-  category_id INT REFERENCES categories(id) ON DELETE SET NULL,  -- FK tới danh mục
+  slug VARCHAR(150),
+  price NUMERIC(10,2) NOT NULL,           -- Giá gốc
+  discount_price NUMERIC(10,2),           -- Giá giảm (nếu có)
+  discount_start TIMESTAMP WITH TIME ZONE, -- Bắt đầu giảm giá
+  discount_end TIMESTAMP WITH TIME ZONE,   -- Kết thúc giảm giá
+  category_id INT REFERENCES categories(id) ON DELETE SET NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
-
 
 -- Bảng hình ảnh sản phẩm (Product Images)
 CREATE TABLE product_images (
@@ -45,3 +46,72 @@ CREATE TABLE product_variants (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   CONSTRAINT unique_product_variant UNIQUE(product_id, color, size)
 );
+
+
+-- Bảng giỏ hàng (Cart)
+CREATE TABLE cart (
+  user_id UUID PRIMARY KEY REFERENCES users(id),  -- Mỗi user 1 giỏ hàng (PK đồng thời là FK)
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  -- (Không cần updated_at vì giỏ hàng chỉ lưu ID người dùng)
+);
+
+
+-- Bảng mục giỏ hàng (Cart Items)
+CREATE TABLE cart_items (
+  id SERIAL PRIMARY KEY,
+  cart_id UUID NOT NULL REFERENCES cart(user_id) ON DELETE CASCADE,   -- FK tới giỏ hàng của user
+  product_variant_id INT NOT NULL REFERENCES product_variants(id) ON DELETE CASCADE,
+  quantity INT NOT NULL DEFAULT 1,            -- Số lượng sản phẩm trong giỏ
+  added_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  CONSTRAINT unique_cart_item UNIQUE(cart_id, product_variant_id)
+);
+
+
+-- Bảng đơn hàng (Orders)
+CREATE TABLE orders (
+  id SERIAL PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES users(id),      -- FK tới người đặt hàng
+  shipping_name TEXT NOT NULL,                     -- Tên người nhận hàng
+  shipping_address TEXT NOT NULL,                  -- Địa chỉ giao hàng (ghi trực tiếp)
+  shipping_phone VARCHAR(20),                      -- Số điện thoại người nhận
+  payment_method VARCHAR(50) NOT NULL,             -- Phương thức thanh toán (ví dụ: COD, thẻ tín dụng)
+  total_amount NUMERIC(10,2) NOT NULL,             -- Tổng tiền đơn hàng
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',   -- Trạng thái hiện tại của đơn hàng
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+
+-- Bảng chi tiết đơn hàng (Order Items)
+CREATE TABLE order_items (
+  id SERIAL PRIMARY KEY,
+  order_id INT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  product_variant_id INT NOT NULL REFERENCES product_variants(id),
+  quantity INT NOT NULL DEFAULT 1,
+  price NUMERIC(10,2) NOT NULL,    -- Đơn giá của sản phẩm tại thời điểm đặt
+  CONSTRAINT unique_order_product UNIQUE(order_id, product_variant_id)
+);
+
+
+-- Bảng lịch sử trạng thái đơn hàng (Order Status History)
+CREATE TABLE order_status_history (
+  id SERIAL PRIMARY KEY,
+  order_id INT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  status VARCHAR(20) NOT NULL,
+  changed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  CHECK (status IN ('pending','paid','shipped','completed'))
+);
+
+
+-- Bảng đánh giá sản phẩm (Reviews)
+CREATE TABLE reviews (
+  id SERIAL PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  product_id INT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  rating INT NOT NULL CHECK (rating >= 1 AND rating <= 5),  -- Điểm đánh giá 1-5 sao:contentReference[oaicite:11]{index=11}
+  comment TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  CONSTRAINT unique_user_review UNIQUE(user_id, product_id)
+);
+

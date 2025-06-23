@@ -1,0 +1,4 @@
+CREATE TABLE cart (
+  user_id UUID PRIMARY KEY REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);

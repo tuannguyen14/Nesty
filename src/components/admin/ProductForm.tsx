@@ -13,6 +13,7 @@ interface ProductFormProps {
 
 export default function ProductForm({ product, categories, onSuccess, onCancel }: ProductFormProps) {
     const [loading, setLoading] = useState(false);
+    const [uploadingImages, setUploadingImages] = useState<{ [key: number]: boolean }>({});
     const [formData, setFormData] = useState<CreateProductData>({
         name: '',
         description: '',
@@ -52,15 +53,49 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
     const uploadImageToBucket = async (file: File): Promise<string> => {
         const fileExt = file.name.split('.').pop();
         const filePath = `product-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
-        // Upload
-        const { data, error } = await supabase.storage
-            .from('product-images')
-            .upload(filePath, file, { cacheControl: '3600', upsert: false });
+        
+        try {
+            // Upload
+            const { data, error } = await supabase.storage
+                .from('product-images')
+                .upload(filePath, file, { cacheControl: '3600', upsert: false });
 
-        if (error) throw error;
-        // Lấy public URL
-        const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(filePath);
-        return urlData.publicUrl;
+            if (error) {
+                console.error('Upload error:', error);
+                throw new Error(`Upload failed: ${error.message}`);
+            }
+
+            // Lấy public URL
+            const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(filePath);
+            
+            if (!urlData.publicUrl) {
+                throw new Error('Failed to get public URL');
+            }
+            
+            return urlData.publicUrl;
+        } catch (error) {
+            console.error('Upload image error:', error);
+            throw error;
+        }
+    };
+
+    const handleImageUpload = async (index: number, file: File) => {
+        if (!file) return;
+        
+        try {
+            // Set loading state for specific image
+            setUploadingImages(prev => ({ ...prev, [index]: true }));
+            
+            const url = await uploadImageToBucket(file);
+            updateImage(index, 'image_url', url);
+            
+        } catch (error: any) {
+            console.error('Upload failed:', error);
+            alert(`Upload hình ảnh thất bại: ${error.message || 'Lỗi không xác định'}`);
+        } finally {
+            // Always reset loading state
+            setUploadingImages(prev => ({ ...prev, [index]: false }));
+        }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -79,7 +114,7 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
             onSuccess();
         } catch (error: any) {
             console.error('Error saving product:', error);
-            alert('Có lỗi xảy ra: ' + error.message);
+            alert('Có lỗi xảy ra: ' + (error.message || 'Lỗi không xác định'));
         } finally {
             setLoading(false);
         }
@@ -207,6 +242,12 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
             ...prev,
             images: prev.images.filter((_, i) => i !== index)
         }));
+        // Clean up upload state
+        setUploadingImages(prev => {
+            const newState = { ...prev };
+            delete newState[index];
+            return newState;
+        });
     };
 
     const updateImage = (index: number, field: keyof typeof formData.images[0], value: string | number) => {
@@ -375,21 +416,20 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
                                 <input
                                     type="file"
                                     accept="image/*"
-                                    onChange={async (e) => {
+                                    disabled={uploadingImages[index]}
+                                    onChange={(e) => {
                                         const file = e.target.files?.[0];
-                                        if (!file) return;
-                                        try {
-                                            setLoading(true);
-                                            const url = await uploadImageToBucket(file);
-                                            updateImage(index, 'image_url', url);
-                                        } catch (err) {
-                                            alert('Upload hình ảnh thất bại');
-                                        } finally {
-                                            setLoading(false);
+                                        if (file) {
+                                            handleImageUpload(index, file);
                                         }
                                     }}
                                     className="w-full"
                                 />
+                                {uploadingImages[index] && (
+                                    <div className="text-sm text-blue-600 mt-1">
+                                        Đang upload...
+                                    </div>
+                                )}
                                 {image.image_url && (
                                     <input
                                         type="text"
@@ -412,14 +452,14 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
                             <button
                                 type="button"
                                 onClick={() => removeImage(index)}
-                                className="px-3 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                                disabled={uploadingImages[index]}
+                                className="px-3 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 Xóa
                             </button>
                         </div>
                     ))}
                 </div>
-
 
                 {/* Variants */}
                 <div>
@@ -440,7 +480,6 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
                                 <div>Màu sắc</div>
                                 <input
                                     type="text"
-                                    // placeholder="Màu sắc"
                                     value={variant.color}
                                     onChange={(e) => updateVariant(index, 'color', e.target.value)}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -450,23 +489,11 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
                                 <div>Size</div>
                                 <input
                                     type="text"
-                                    // placeholder="Size"
                                     value={variant.size}
                                     onChange={(e) => updateVariant(index, 'size', e.target.value)}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 />
                             </div>
-                            {/* <div>
-                <div>Giá thay thế</div>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={variant.price_override}
-                  onChange={(e) => updateVariant(index, 'price_override', Number(e.target.value))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div> */}
                             <div>
                                 <div>Tồn kho</div>
                                 <input
@@ -494,7 +521,7 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
                 <div className="flex gap-4 pt-6">
                     <button
                         type="submit"
-                        disabled={loading}
+                        disabled={loading || Object.values(uploadingImages).some(Boolean)}
                         className="px-6 py-3 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {loading ? 'Đang lưu...' : (product ? 'Cập nhật' : 'Thêm sản phẩm')}
@@ -502,7 +529,8 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
                     <button
                         type="button"
                         onClick={onCancel}
-                        className="px-6 py-3 bg-gray-300 text-gray-700 font-medium rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                        disabled={loading}
+                        className="px-6 py-3 bg-gray-300 text-gray-700 font-medium rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         Hủy
                     </button>
