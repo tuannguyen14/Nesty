@@ -1,12 +1,14 @@
 'use client';
 
+
+import dayjs from "dayjs";
+
 import { useState, useEffect } from 'react';
 import { useRouter } from "next/navigation";
 import { ProductWithRelations } from "@/types/product";
 import { useSupabaseCart } from "@/hooks/useSupabaseCart";
 import { useAuth } from "@/hooks/useAuth";
 import Image from "next/image";
-import dayjs from "dayjs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -38,6 +40,7 @@ import Lightbox from "yet-another-react-lightbox";
 import "yet-another-react-lightbox/styles.css";
 
 import { getColorStyle } from '@/utils/colorUtils';
+import { ProductVariant } from '@/types/product';
 
 
 interface ProductDetailClientProps {
@@ -47,12 +50,14 @@ interface ProductDetailClientProps {
 export default function ProductDetailClient({ product }: ProductDetailClientProps) {
     const [selectedColor, setSelectedColor] = useState<string>('');
     const [selectedSize, setSelectedSize] = useState<string>('');
-    const [selectedVariant, setSelectedVariant] = useState<any>(null);
+    const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
     const [quantity, setQuantity] = useState(1);
     const [addedToCart, setAddedToCart] = useState(false);
     const [isInWishlist, setIsInWishlist] = useState(false);
     const [lightboxOpen, setLightboxOpen] = useState(false);
     const [lightboxIndex, setLightboxIndex] = useState(0);
+
+    const [isLoading, setIsLoading] = useState(false)
 
     const router = useRouter();
     const { user } = useAuth();
@@ -66,9 +71,16 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
     // Logic tính toán thông tin sản phẩm
     const variants = product.product_variants || [];
     const totalStock = variants.reduce((sum, v) => sum + v.stock, 0);
-    const availableColors = [...new Set(variants.map(v => v.color))];
-    const availableSizes = [...new Set(variants.map(v => v.size))];
-
+    const availableColors = [...new Set(
+        variants
+            .map(v => v.color)
+            .filter((color): color is string => color !== undefined && color !== null)
+    )];
+    const availableSizes = [...new Set(
+        variants
+            .map(v => v.size)
+            .filter((size): size is string => size !== undefined && size !== null)
+    )];
     const now = dayjs();
     const isDiscount =
         product.discount_price &&
@@ -78,13 +90,16 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
         now.isBefore(dayjs(product.discount_end));
 
     const sortedImages = (product.product_images ?? []).sort((a, b) => a.sort_order - b.sort_order);
-    const mainImage = sortedImages[0]?.image_url ?? "/placeholder-image.jpg";
+    const mainImage = sortedImages[0]?.image_url || "/api/placeholder/400/400";
     const otherImages = sortedImages.slice(1);
 
-    const lightboxSlides = sortedImages.map(img => ({
-        src: img.image_url,
-        alt: product.name
-    }));
+    const lightboxSlides = sortedImages.length > 0
+        ? sortedImages.map(img => ({
+            src: img.image_url,
+            alt: product.name
+        }))
+        : [{ src: mainImage, alt: product.name }];
+
 
 
     const discountPercent = isDiscount && product.discount_price
@@ -99,7 +114,7 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
     useEffect(() => {
         if (selectedColor && selectedSize) {
             const variant = variants.find(v => v.color === selectedColor && v.size === selectedSize);
-            setSelectedVariant(variant);
+            setSelectedVariant(variant || null); // Ensure null instead of undefined
             // Reset quantity nếu variant mới có ít stock hơn
             if (variant && quantity > variant.stock) {
                 setQuantity(Math.max(1, variant.stock));
@@ -113,28 +128,28 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
     const getAvailableSizesForColor = (color: string) => {
         return variants
             .filter(v => v.color === color)
-            .map(v => ({ size: v.size, stock: v.stock }));
+            .map(v => ({ size: v.size, stock: v.stock }))
+            .filter(item => item.size); // Filter out undefined sizes
     };
 
-    // Get available colors for selected size
     const getAvailableColorsForSize = (size: string) => {
         return variants
             .filter(v => v.size === size)
-            .map(v => ({ color: v.color, stock: v.stock }));
+            .map(v => ({ color: v.color, stock: v.stock }))
+            .filter(item => item.color); // Filter out undefined colors
     };
 
     // Check if a size is available for current selected color
     const isSizeAvailable = (size: string) => {
-        if (!selectedColor) return true;
+        if (!selectedColor) return variants.some(v => v.size === size && v.stock > 0);
         const variant = variants.find(v => v.color === selectedColor && v.size === size);
-        return variant && variant.stock > 0;
+        return variant ? variant.stock > 0 : false;
     };
 
-    // Check if a color is available for current selected size
     const isColorAvailable = (color: string) => {
-        if (!selectedSize) return true;
+        if (!selectedSize) return variants.some(v => v.color === color && v.stock > 0);
         const variant = variants.find(v => v.color === color && v.size === selectedSize);
-        return variant && variant.stock > 0;
+        return variant ? variant.stock > 0 : false;
     };
 
     // Get stock for a specific size when color is selected
@@ -143,6 +158,7 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
         const variant = variants.find(v => v.color === selectedColor && v.size === size);
         return variant ? variant.stock : 0;
     };
+
 
     // Get stock for a specific color when size is selected
     const getColorStock = (color: string) => {
@@ -153,10 +169,15 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
 
     // Get current price based on variant
     const getCurrentPrice = () => {
+       try {
         if (selectedVariant?.price_override) {
             return selectedVariant.price_override;
         }
         return isDiscount && product.discount_price ? product.discount_price : product.price;
+    } catch (error) {
+        console.error('Error calculating price:', error);
+        return product.price;
+    }
     };
 
     // Get stock for selected variant
@@ -215,7 +236,7 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
             return;
         }
 
-        // Validate selection
+        // Validate selection - chỉ check khi có options
         if (availableColors.length > 0 && !selectedColor) {
             alert('Vui lòng chọn màu sắc');
             return;
@@ -225,32 +246,51 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
             return;
         }
 
-        if (!selectedVariant) {
+        // Nếu có variants nhưng chưa chọn đủ thông tin
+        if (variants.length > 0 && !selectedVariant) {
+            alert('Vui lòng chọn phiên bản sản phẩm');
+            return;
+        }
+
+        // Nếu không có variants nào, tạo variant mặc định
+        let variantToAdd = selectedVariant;
+        if (!variantToAdd && variants.length === 0) {
+            // Trường hợp không có variants, cần tạo logic khác
+            alert('Sản phẩm này không có phiên bản để thêm vào giỏ');
+            return;
+        }
+
+        if (!variantToAdd) {
             alert('Vui lòng chọn phiên bản sản phẩm');
             return;
         }
 
         // Kiểm tra tồn kho
-        if (selectedVariant.stock < quantity) {
-            alert(`Chỉ còn ${selectedVariant.stock} sản phẩm trong kho`);
+        if (variantToAdd.stock < quantity) {
+            alert(`Chỉ còn ${variantToAdd.stock} sản phẩm trong kho`);
             return;
         }
 
-        if (selectedVariant.stock <= 0) {
+        if (variantToAdd.stock <= 0) {
             alert('Sản phẩm này đã hết hàng');
             return;
         }
 
-        const success = await addToCart(selectedVariant.id, quantity);
+        try {
+            const success = await addToCart(variantToAdd.id, quantity);
 
-        if (success) {
-            setAddedToCart(true);
-            // Reset after 2 seconds
-            setTimeout(() => {
-                setAddedToCart(false);
-            }, 2000);
+            if (success) {
+                setAddedToCart(true);
+                // Reset after 2 seconds
+                setTimeout(() => {
+                    setAddedToCart(false);
+                }, 2000);
+            }
+            return success;
+        } catch (error) {
+            console.error('Error adding to cart:', error);
+            return false;
         }
-        return success;
     };
 
     // Handle buy now

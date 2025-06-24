@@ -70,7 +70,7 @@ export function HeroSection() {
             <Button
               size="lg"
               variant="outline"
-              onClick={() => router.push('/categories')}
+              onClick={() => router.push('/products?category=dep-banh-mi')}
               className="border-2 border-orange-300 text-orange-600 hover:bg-orange-50 hover:border-orange-400 px-8 py-6 text-lg font-semibold rounded-2xl transition-all duration-300 hover-lift"
             >
               Xem danh mục

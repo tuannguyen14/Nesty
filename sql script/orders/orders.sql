@@ -19,5 +19,6 @@ CREATE TABLE
         shipping_phone TEXT,
         shipping_code TEXT, -- Mã vận chuyển
         shipping_provider TEXT, -- Tên đơn vị vận chuyển (VNPost, Giao Hàng Nhanh, v.v.)
-        created_at TIMESTAMPTZ DEFAULT NOW ()
+        created_at TIMESTAMPTZ DEFAULT NOW (),
+        order_code TEXT UNIQUE
     );

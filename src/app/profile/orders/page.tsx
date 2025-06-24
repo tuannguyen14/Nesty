@@ -83,8 +83,8 @@ const statusConfig = {
 
 export default function OrdersPage() {
   const router = useRouter();
-  const { user } = useAuth();
-  
+  const { user, loading: userLoading } = useAuth();
+
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -93,7 +93,7 @@ export default function OrdersPage() {
   const [activeTab, setActiveTab] = useState('all');
 
   useEffect(() => {
-    if (!user) {
+    if (!userLoading && !user) {
       router.push('/login');
     } else {
       fetchOrders();
@@ -109,6 +109,8 @@ export default function OrdersPage() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
+
+      console.log('Fetched orders:', data);
 
       // Mock order items for demonstration
       const ordersWithItems = (data || []).map(order => ({
@@ -145,7 +147,7 @@ export default function OrdersPage() {
 
     // Filter by search query
     if (searchQuery) {
-      filtered = filtered.filter(order => 
+      filtered = filtered.filter(order =>
         order.order_number.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
@@ -196,7 +198,7 @@ export default function OrdersPage() {
             </div>
           </div>
         </CardHeader>
-        
+
         <CardContent className="space-y-4">
           {/* Order Items */}
           <div className="space-y-3">
@@ -238,7 +240,7 @@ export default function OrdersPage() {
               <Eye className="w-4 h-4 mr-2" />
               Chi tiết
             </Button>
-            
+
             {order.status === 'completed' && (
               <>
                 <Button
@@ -259,7 +261,7 @@ export default function OrdersPage() {
                 </Button>
               </>
             )}
-            
+
             {order.status === 'pending' && (
               <Button
                 variant="outline"
@@ -289,14 +291,14 @@ export default function OrdersPage() {
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
-          <Link 
+          <Link
             href="/profile"
             className="inline-flex items-center text-gray-600 hover:text-orange-600 mb-4 transition-colors"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Quay lại tài khoản
           </Link>
-          
+
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold text-gray-800 mb-2">Lịch sử đơn hàng</h1>
@@ -304,8 +306,8 @@ export default function OrdersPage() {
                 Bạn có {orders.length} đơn hàng
               </p>
             </div>
-            
-            <Button 
+
+            <Button
               onClick={() => router.push('/products')}
               className="bg-gradient-orange hover:bg-gradient-orange-dark text-white rounded-xl"
             >
@@ -328,7 +330,7 @@ export default function OrdersPage() {
                   className="pl-10 rounded-xl border-orange-200 focus:border-orange-500"
                 />
               </div>
-              
+
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-full md:w-48 rounded-xl border-orange-200">
                   <Filter className="w-4 h-4 mr-2" />
@@ -343,7 +345,7 @@ export default function OrdersPage() {
                   <SelectItem value="cancelled">Đã hủy</SelectItem>
                 </SelectContent>
               </Select>
-              
+
               <Select value={sortBy} onValueChange={setSortBy}>
                 <SelectTrigger className="w-full md:w-48 rounded-xl border-orange-200">
                   <SelectValue placeholder="Sắp xếp" />
@@ -360,37 +362,37 @@ export default function OrdersPage() {
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid grid-cols-6 rounded-xl bg-white shadow-md h-12 p-1 mb-6">
-            <TabsTrigger 
-              value="all" 
+            <TabsTrigger
+              value="all"
               className="rounded-lg data-[state=active]:bg-gradient-orange data-[state=active]:text-white"
             >
               Tất cả ({orders.length})
             </TabsTrigger>
-            <TabsTrigger 
+            <TabsTrigger
               value="pending"
               className="rounded-lg data-[state=active]:bg-gradient-orange data-[state=active]:text-white"
             >
               Chờ xác nhận ({getOrdersByStatus('pending').length})
             </TabsTrigger>
-            <TabsTrigger 
+            <TabsTrigger
               value="processing"
               className="rounded-lg data-[state=active]:bg-gradient-orange data-[state=active]:text-white"
             >
               Đang xử lý ({getOrdersByStatus('processing').length})
             </TabsTrigger>
-            <TabsTrigger 
+            <TabsTrigger
               value="shipping"
               className="rounded-lg data-[state=active]:bg-gradient-orange data-[state=active]:text-white"
             >
               Đang giao ({getOrdersByStatus('shipping').length})
             </TabsTrigger>
-            <TabsTrigger 
+            <TabsTrigger
               value="completed"
               className="rounded-lg data-[state=active]:bg-gradient-orange data-[state=active]:text-white"
             >
               Hoàn thành ({getOrdersByStatus('completed').length})
             </TabsTrigger>
-            <TabsTrigger 
+            <TabsTrigger
               value="cancelled"
               className="rounded-lg data-[state=active]:bg-gradient-orange data-[state=active]:text-white"
             >
@@ -399,7 +401,7 @@ export default function OrdersPage() {
           </TabsList>
 
           <TabsContent value={activeTab} className="space-y-4">
-            {getFilteredOrders().filter(order => 
+            {getFilteredOrders().filter(order =>
               activeTab === 'all' || order.status === activeTab
             ).length === 0 ? (
               <Card className="border-0 shadow-md rounded-2xl">
@@ -409,8 +411,8 @@ export default function OrdersPage() {
                     Không có đơn hàng nào
                   </h3>
                   <p className="text-gray-500">
-                    {activeTab === 'all' 
-                      ? 'Bạn chưa có đơn hàng nào' 
+                    {activeTab === 'all'
+                      ? 'Bạn chưa có đơn hàng nào'
                       : `Không có đơn hàng ${statusConfig[activeTab as keyof typeof statusConfig]?.label.toLowerCase()}`
                     }
                   </p>

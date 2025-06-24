@@ -70,11 +70,11 @@ export function CategoriesSection({ categories }: CategoriesSectionProps) {
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 md:gap-6">
           {categories.map((category, index) => {
-            const Icon = getCategoryIcon(category.slug);
+            // const Icon = getCategoryIcon(category.slug);
             return (
               <Link
                 key={category.id}
-                href={`/categories/${category.slug}`}
+                href={`/products?category=${category.slug}`}
                 className="group"
                 style={{
                   animationDelay: `${index * 100}ms`
@@ -110,14 +110,14 @@ export function CategoriesSection({ categories }: CategoriesSectionProps) {
         </div>
 
         {/* View All Categories Button */}
-        <div className="text-center mt-10">
+        {/* <div className="text-center mt-10">
           <Link href="/categories">
             <button className="inline-flex items-center gap-2 px-6 py-3 bg-white border-2 border-orange-300 text-orange-600 hover:bg-orange-50 hover:border-orange-400 rounded-2xl font-semibold transition-all duration-300 hover-lift shadow-md hover:shadow-lg">
               <Package className="w-5 h-5" />
               Xem tất cả danh mục
             </button>
           </Link>
-        </div>
+        </div> */}
       </div>
     </section>
   );

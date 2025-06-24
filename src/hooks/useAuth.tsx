@@ -2,22 +2,9 @@
 
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { UserProfile } from '@/types/userProfile'; // Giả sử bạn đã định nghĩa kiểu User trong types/user.ts
+import { AuthContextType } from '@/types/authContextType'; // Giả sử bạn đã định nghĩa kiểu AuthContextType trong types/AuthContextType.ts
 
-interface User {
-  id: string;
-  email: string;
-  full_name?: string | null;
-  phone?: string | null;
-  address?: string | null;
-  role?: 'user' | 'admin';
-  created_at: string;
-}
-
-interface AuthContextType {
-  user: User | null;
-  loading: boolean;
-  logout: () => void;
-}
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
@@ -26,7 +13,7 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Hàm lấy thêm thông tin từ bảng users

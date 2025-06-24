@@ -1,118 +1,65 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { createContext, useContext, useCallback, useRef, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from './useAuth';
+import { useAuth } from '@/hooks/useAuth';
+import { CartItemWithDetails, UseSupabaseCartReturn } from '@/hooks/useSupabaseCart';
 
-// Types cho Supabase Cart
-export interface CartItemWithDetails {
-  id: number;
-  user_id: string;
-  product_variant_id: number;
-  quantity: number;
-  added_at: string;
-  product_variants: {
-    id: number;
-    product_id: number;
-    color?: string;
-    size?: string;
-    price_override?: number;
-    stock: number;
-    products: {
-      id: number;
-      name: string;
-      price: number;
-      discount_price?: number;
-      slug: string;
-      product_images: Array<{
-        id: number;
-        image_url: string;
-        sort_order: number;
-      }>;
-    };
-  };
-}
+// Tạo Context cho Cart
+const CartContext = createContext<UseSupabaseCartReturn | null>(null);
 
-export interface CartSummary {
-  items: CartItemWithDetails[];
-  totalItems: number;
-  subtotal: number;
-  loading: boolean;
-  error: string | null;
-}
-
-export interface UseSupabaseCartReturn {
-  items: CartItemWithDetails[];
-  totalItems: number;
-  subtotal: number;
-  loading: boolean;
-  error: string | null;
-  addToCart: (productVariantId: number, quantity?: number) => Promise<boolean>;
-  removeFromCart: (cartItemId: number) => Promise<boolean>;
-  updateQuantity: (cartItemId: number, quantity: number) => Promise<boolean>;
-  clearCart: () => Promise<boolean>;
-  refreshCart: () => Promise<void>;
-  isInCart: (productVariantId: number) => boolean;
-  getCartItem: (productVariantId: number) => CartItemWithDetails | undefined;
-}
-
-export const useSupabaseCart = (): UseSupabaseCartReturn => {
+// Provider Component với enhanced state management
+export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading: authLoading } = useAuth();
   const [items, setItems] = useState<CartItemWithDetails[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // Stable refs để tránh infinite re-renders
+  // Refs for stability
   const userIdRef = useRef<string | null>(null);
   const lastFetchTimeRef = useRef<number>(0);
   const isInitializedRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // FIXED: Stable fetch function với proper dependencies
+  // Enhanced fetch function with better error handling
   const fetchCartItems = useCallback(async (force = false) => {
-    // Prevent multiple simultaneous fetches
     if (loading && !force) {
-      console.log('Fetch already in progress, skipping...');
+      console.log('🔄 Fetch already in progress, skipping...');
       return;
     }
 
-    // Wait for auth to complete
     if (authLoading) {
-      console.log('Auth loading, waiting...');
+      console.log('🔐 Auth loading, waiting...');
       return;
     }
 
-    // Clear items if no user
     if (!user) {
+      console.log('👤 No user, clearing cart items');
       setItems([]);
       setError(null);
       isInitializedRef.current = true;
       return;
     }
 
-    // Check if user changed
     const userChanged = userIdRef.current !== user.id;
     if (userChanged) {
-      console.log('User changed, forcing refresh');
+      console.log('🔄 User changed, forcing refresh');
       userIdRef.current = user.id;
       isInitializedRef.current = false;
       force = true;
     }
 
-    // Debounce non-forced requests
     const now = Date.now();
     if (!force && now - lastFetchTimeRef.current < 1000) {
-      console.log('Request debounced');
+      console.log('⏱️ Request debounced');
       return;
     }
 
-    // Skip if already initialized and not forced
     if (!force && isInitializedRef.current) {
-      console.log('Already initialized, skipping fetch');
+      console.log('✅ Already initialized, skipping fetch');
       return;
     }
 
-    // Cancel previous request
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -120,7 +67,7 @@ export const useSupabaseCart = (): UseSupabaseCartReturn => {
     abortControllerRef.current = new AbortController();
     lastFetchTimeRef.current = now;
 
-    console.log('Fetching cart items for user:', user.id);
+    console.log('🛒 Fetching cart items for user:', user.id);
     setLoading(true);
     setError(null);
 
@@ -157,63 +104,61 @@ export const useSupabaseCart = (): UseSupabaseCartReturn => {
         .eq('user_id', user.id)
         .order('added_at', { ascending: false });
 
-      // Check if request was cancelled
       if (abortControllerRef.current?.signal.aborted) {
         return;
       }
 
       if (fetchError) throw fetchError;
 
-      // FIXED: Proper type assertion with validation
       const validItems = (data || []).filter(item => 
         item.product_variants
       ) as unknown as CartItemWithDetails[];
 
-      console.log(`Cart loaded: ${validItems.length} items`);
+      console.log(`✅ Cart loaded: ${validItems.length} items`);
       setItems(validItems);
       isInitializedRef.current = true;
 
     } catch (err: any) {
       if (err.name === 'AbortError') {
-        console.log('Fetch cancelled');
+        console.log('❌ Fetch cancelled');
         return;
       }
-      console.error('Cart fetch error:', err);
+      console.error('❌ Cart fetch error:', err);
       setError('Không thể tải giỏ hàng');
     } finally {
       setLoading(false);
     }
-  }, [user?.id, authLoading, loading]); // Minimal dependencies
+  }, [user?.id, authLoading, loading]);
 
-  // FIXED: Initialize only once when user is ready
+  // Initialize cart when user is ready
   useEffect(() => {
     if (!authLoading && user && !isInitializedRef.current) {
-      console.log('Initializing cart for user:', user.id);
+      console.log('🚀 Initializing cart for user:', user.id);
       fetchCartItems(true);
     }
-  }, [user?.id, authLoading]); // Only depend on user ID and auth loading
+  }, [user?.id, authLoading, fetchCartItems]);
 
-  // FIXED: Manual refresh function - return Promise<void>
+  // Manual refresh function
   const refreshCart = useCallback(async (): Promise<void> => {
-    console.log('Manual cart refresh requested');
+    console.log('🔄 Manual cart refresh requested');
     await fetchCartItems(true);
   }, [fetchCartItems]);
 
-  // OPTIMIZED: Add to cart với minimal re-renders
+  // Enhanced add to cart with immediate UI feedback
   const addToCart = useCallback(async (productVariantId: number, quantity: number = 1): Promise<boolean> => {
     if (!user) {
       setError('Vui lòng đăng nhập để thêm vào giỏ hàng');
       return false;
     }
 
+    console.log('➕ Adding to cart:', { productVariantId, quantity });
     setError(null);
 
     try {
-      // Check stock and existing item in parallel
       const [stockResult, existingResult] = await Promise.all([
         supabase
           .from('product_variants')
-          .select('stock')
+          .select('stock, products(name)')
           .eq('id', productVariantId)
           .single(),
         supabase
@@ -221,7 +166,7 @@ export const useSupabaseCart = (): UseSupabaseCartReturn => {
           .select('id, quantity')
           .eq('user_id', user.id)
           .eq('product_variant_id', productVariantId)
-          .maybeSingle() // Use maybeSingle instead of single to avoid error when not found
+          .maybeSingle()
       ]);
 
       const { data: variant, error: stockError } = stockResult;
@@ -242,7 +187,7 @@ export const useSupabaseCart = (): UseSupabaseCartReturn => {
         return false;
       }
 
-      // Update or insert
+      // Perform database operation
       if (existingItem) {
         const { error } = await supabase
           .from('cart_items')
@@ -260,21 +205,23 @@ export const useSupabaseCart = (): UseSupabaseCartReturn => {
         if (error) throw error;
       }
 
-      // Refresh cart after successful operation
+      // Force refresh to get updated data
+      console.log('✅ Add to cart successful, refreshing...');
       await fetchCartItems(true);
       return true;
 
     } catch (err: any) {
-      console.error('Add to cart error:', err);
+      console.error('❌ Add to cart error:', err);
       setError('Không thể thêm sản phẩm vào giỏ hàng');
       return false;
     }
   }, [user, fetchCartItems]);
 
-  // OPTIMIZED: Remove from cart
+  // Enhanced remove with immediate UI feedback
   const removeFromCart = useCallback(async (cartItemId: number): Promise<boolean> => {
     if (!user) return false;
 
+    console.log('🗑️ Removing from cart:', cartItemId);
     setError(null);
 
     try {
@@ -286,12 +233,21 @@ export const useSupabaseCart = (): UseSupabaseCartReturn => {
 
       if (error) throw error;
 
-      // Optimistic update
-      setItems(prev => prev.filter(item => item.id !== cartItemId));
+      // Immediate optimistic update
+      setItems(prev => {
+        const updated = prev.filter(item => item.id !== cartItemId);
+        console.log('🔄 Optimistic update - removed item, new count:', updated.length);
+        return updated;
+      });
+
+      // Also refresh to ensure sync
+      setTimeout(() => fetchCartItems(true), 100);
+      
+      console.log('✅ Remove from cart successful');
       return true;
 
     } catch (err: any) {
-      console.error('Remove from cart error:', err);
+      console.error('❌ Remove from cart error:', err);
       setError('Không thể xóa sản phẩm khỏi giỏ hàng');
       // Refresh on error to sync state
       fetchCartItems(true);
@@ -299,7 +255,7 @@ export const useSupabaseCart = (): UseSupabaseCartReturn => {
     }
   }, [user, fetchCartItems]);
 
-  // OPTIMIZED: Update quantity
+  // Enhanced update quantity
   const updateQuantity = useCallback(async (cartItemId: number, quantity: number): Promise<boolean> => {
     if (!user) return false;
 
@@ -307,9 +263,9 @@ export const useSupabaseCart = (): UseSupabaseCartReturn => {
       return await removeFromCart(cartItemId);
     }
 
+    console.log('📝 Updating quantity:', { cartItemId, quantity });
     setError(null);
 
-    // Find item in current state
     const item = items.find(i => i.id === cartItemId);
     if (!item) {
       setError('Không tìm thấy sản phẩm trong giỏ hàng');
@@ -330,25 +286,34 @@ export const useSupabaseCart = (): UseSupabaseCartReturn => {
 
       if (error) throw error;
 
-      // Optimistic update
-      setItems(prev => prev.map(item => 
-        item.id === cartItemId ? { ...item, quantity } : item
-      ));
+      // Immediate optimistic update
+      setItems(prev => {
+        const updated = prev.map(item => 
+          item.id === cartItemId ? { ...item, quantity } : item
+        );
+        console.log('🔄 Optimistic update - quantity changed');
+        return updated;
+      });
+
+      // Also refresh to ensure sync
+      setTimeout(() => fetchCartItems(true), 100);
+
+      console.log('✅ Update quantity successful');
       return true;
 
     } catch (err: any) {
-      console.error('Update quantity error:', err);
+      console.error('❌ Update quantity error:', err);
       setError('Không thể cập nhật số lượng');
-      // Refresh on error
       fetchCartItems(true);
       return false;
     }
   }, [user, items, removeFromCart, fetchCartItems]);
 
-  // OPTIMIZED: Clear cart
+  // Enhanced clear cart
   const clearCart = useCallback(async (): Promise<boolean> => {
     if (!user) return false;
 
+    console.log('🧹 Clearing cart');
     setError(null);
 
     try {
@@ -359,39 +324,41 @@ export const useSupabaseCart = (): UseSupabaseCartReturn => {
 
       if (error) throw error;
 
-      // Clear state immediately
+      // Immediate UI update
       setItems([]);
+      console.log('✅ Clear cart successful');
       return true;
 
     } catch (err: any) {
-      console.error('Clear cart error:', err);
+      console.error('❌ Clear cart error:', err);
       setError('Không thể xóa giỏ hàng');
       return false;
     }
   }, [user]);
 
-  // MEMOIZED helper functions để tránh re-renders
+  // Helper functions
   const isInCart = useCallback((productVariantId: number): boolean => {
-    return items.some(item => item.product_variant_id === productVariantId);
+    const result = items.some(item => item.product_variant_id === productVariantId);
+    return result;
   }, [items]);
 
   const getCartItem = useCallback((productVariantId: number): CartItemWithDetails | undefined => {
     return items.find(item => item.product_variant_id === productVariantId);
   }, [items]);
 
-  // MEMOIZED calculations
-  const { subtotal, totalItems } = useMemo(() => {
-    const subtotal = items.reduce((total, item) => {
+  // Memoized calculations
+  const subtotal = React.useMemo(() => {
+    return items.reduce((total, item) => {
       const product = item.product_variants.products;
       const finalPrice = item.product_variants.price_override ?? 
                         product.discount_price ?? 
                         product.price;
       return total + (finalPrice * item.quantity);
     }, 0);
+  }, [items]);
 
-    const totalItems = items.reduce((total, item) => total + item.quantity, 0);
-
-    return { subtotal, totalItems };
+  const totalItems = React.useMemo(() => {
+    return items.reduce((total, item) => total + item.quantity, 0);
   }, [items]);
 
   // Cleanup on unmount
@@ -403,7 +370,18 @@ export const useSupabaseCart = (): UseSupabaseCartReturn => {
     };
   }, []);
 
-  return {
+  // Debug logging
+  useEffect(() => {
+    console.log('🛒 Cart state updated:', {
+      itemCount: items.length,
+      totalItems,
+      subtotal,
+      loading,
+      error
+    });
+  }, [items, totalItems, subtotal, loading, error]);
+
+  const contextValue: UseSupabaseCartReturn = {
     items,
     totalItems,
     subtotal,
@@ -417,4 +395,21 @@ export const useSupabaseCart = (): UseSupabaseCartReturn => {
     isInCart,
     getCartItem,
   };
+
+  return (
+    <CartContext.Provider value={contextValue}>
+      {children}
+    </CartContext.Provider>
+  );
+};
+
+// Hook để sử dụng Cart Context
+export const useCart = (): UseSupabaseCartReturn => {
+  const context = useContext(CartContext);
+  
+  if (!context) {
+    throw new Error('useCart must be used within a CartProvider');
+  }
+  
+  return context;
 };

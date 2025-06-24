@@ -1,7 +1,8 @@
+// Fixed Checkout Page - Correct Database Schema
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { useCart } from '@/hooks/useCart';
+import { useSupabaseCart } from '@/hooks/useSupabaseCart';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
@@ -32,30 +33,15 @@ import {
   Building,
   QrCode,
   AlertCircle,
-  ChevronDown
+  Loader2
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
-import vietnamProvinces  from '@/data/provinces/VietnamProvinces.json';
+import vietnamProvinces from '@/data/provinces/VietnamProvinces.json';
 
-interface ShippingInfo {
-  fullName: string;
-  phone: string;
-  email: string;
-  address: string;
-  ward: string;
-  district: string;
-  city: string;
-  note: string;
-}
+import { ShippingInfo } from '@/types/shippingInfo';
+import { PaymentMethod } from '@/types/paymentMethod';
 
-interface PaymentMethod {
-  id: string;
-  name: string;
-  description: string;
-  icon: any;
-  isPopular?: boolean;
-}
 
 const paymentMethods: PaymentMethod[] = [
   {
@@ -93,16 +79,17 @@ const paymentMethods: PaymentMethod[] = [
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { cart, getCartTotal, clearCart } = useCart();
-  const { user } = useAuth();
-  
+  const { items, subtotal, clearCart, loading: cartLoading } = useSupabaseCart();
+  const { user, loading: userLoading } = useAuth();
+
   const [loading, setLoading] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState('cod');
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [couponCode, setCouponCode] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
   const [discount, setDiscount] = useState(0);
-  
+  const [selectedVoucherId, setSelectedVoucherId] = useState<number | null>(null);
+
   const [shippingInfo, setShippingInfo] = useState<ShippingInfo>({
     fullName: '',
     phone: '',
@@ -111,7 +98,7 @@ export default function CheckoutPage() {
     ward: '',
     district: '',
     city: '',
-    note: ''
+    // note: ''
   });
 
   const [errors, setErrors] = useState<Partial<ShippingInfo>>({});
@@ -131,10 +118,11 @@ export default function CheckoutPage() {
 
   // Redirect if cart is empty
   useEffect(() => {
-    if (cart.length === 0) {
+    // Chỉ redirect khi cart đã load xong và thực sự rỗng
+    if (!userLoading && !cartLoading && items.length === 0) {
       router.push('/cart');
     }
-  }, [cart, router]);
+  }, [items.length, cartLoading, router, userLoading]);
 
   // Auto-fill user info if logged in
   useEffect(() => {
@@ -142,7 +130,7 @@ export default function CheckoutPage() {
       setShippingInfo(prev => ({
         ...prev,
         email: user.email || '',
-        // fullName: user.user_metadata?.full_name || ''
+        fullName: user.full_name || ''
       }));
     }
   }, [user]);
@@ -168,27 +156,105 @@ export default function CheckoutPage() {
     }
   }, [shippingInfo.district]);
 
+  if (cartLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-orange-50/30 via-white to-orange-50/30 flex items-center justify-center">
+        <Card className="border-0 shadow-xl bg-white rounded-3xl overflow-hidden">
+          <CardContent className="text-center py-20">
+            <Loader2 className="w-16 h-16 text-orange-500 mx-auto mb-4 animate-spin" />
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">Đang tải giỏ hàng...</h2>
+            <p className="text-gray-600">Vui lòng đợi trong giây lát.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!cartLoading && items.length === 0) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-orange-50/30 via-white to-orange-50/30 flex items-center justify-center">
+        <Card className="border-0 shadow-xl bg-white rounded-3xl overflow-hidden">
+          <CardContent className="text-center py-20">
+            <ShoppingBag className="w-16 h-16 text-orange-400 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">Giỏ hàng trống</h2>
+            <p className="text-gray-600 mb-8">Vui lòng thêm sản phẩm vào giỏ hàng trước khi thanh toán.</p>
+            <Link href="/products">
+              <Button className="bg-gradient-orange hover:bg-gradient-orange-dark text-white px-8 py-4 rounded-2xl">
+                Tiếp tục mua sắm
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   // Calculate totals
-  const subtotal = getCartTotal();
   const shippingFee = subtotal >= 300000 ? 0 : 30000;
   const total = subtotal - discount + shippingFee;
 
-  // Apply coupon
-  const applyCoupon = () => {
-    if (couponCode.toUpperCase() === 'ORANGE10') {
-      setDiscount(subtotal * 0.1);
-      setAppliedCoupon(couponCode.toUpperCase());
-    } else if (couponCode.toUpperCase() === 'FREESHIP') {
-      setDiscount(shippingFee);
-      setAppliedCoupon(couponCode.toUpperCase());
-    } else {
-      alert('Mã giảm giá không hợp lệ!');
+  // Apply coupon function với voucher lookup
+  const applyCoupon = async () => {
+    if (!couponCode.trim()) {
+      alert('Vui lòng nhập mã giảm giá');
+      return;
+    }
+
+    try {
+      // Tìm voucher trong database
+      const { data: voucher, error } = await supabase
+        .from('vouchers')
+        .select('*')
+        .eq('code', couponCode.toUpperCase())
+        .single();
+
+      if (error || !voucher) {
+        alert('Mã giảm giá không hợp lệ!');
+        return;
+      }
+
+      // Kiểm tra voucher còn hiệu lực
+      const now = new Date();
+      if (voucher.valid_from && new Date(voucher.valid_from) > now) {
+        alert('Mã giảm giá chưa có hiệu lực');
+        return;
+      }
+      if (voucher.valid_to && new Date(voucher.valid_to) < now) {
+        alert('Mã giảm giá đã hết hạn');
+        return;
+      }
+
+      // Kiểm tra giá trị đơn hàng tối thiểu
+      if (voucher.min_order_value && subtotal < voucher.min_order_value) {
+        alert(`Đơn hàng phải có giá trị tối thiểu ${voucher.min_order_value.toLocaleString('vi-VN')}đ`);
+        return;
+      }
+
+      // Tính toán giảm giá
+      let discountAmount = 0;
+      if (voucher.discount_type === 'percent') {
+        discountAmount = subtotal * (voucher.discount_value / 100);
+        if (voucher.max_discount && discountAmount > voucher.max_discount) {
+          discountAmount = voucher.max_discount;
+        }
+      } else {
+        discountAmount = voucher.discount_value;
+      }
+
+      setDiscount(discountAmount);
+      setAppliedCoupon(voucher.code);
+      setSelectedVoucherId(voucher.id);
+      alert('Áp dụng mã giảm giá thành công!');
+    } catch (error) {
+      console.error('Error applying coupon:', error);
+      alert('Có lỗi xảy ra khi áp dụng mã giảm giá');
     }
   };
 
   const removeCoupon = () => {
     setDiscount(0);
     setAppliedCoupon(null);
+    setSelectedVoucherId(null);
     setCouponCode('');
   };
 
@@ -226,7 +292,7 @@ export default function CheckoutPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  // Handle order submission
+  // FIXED: Handle order submission với database schema chính xác
   const handleSubmitOrder = async () => {
     if (!validateForm()) {
       alert('Vui lòng điền đầy đủ thông tin giao hàng');
@@ -241,47 +307,74 @@ export default function CheckoutPage() {
     setLoading(true);
 
     try {
-      // Create order in database
+      // ✅ Tạo order theo đúng schema
       const orderData = {
         user_id: user?.id || null,
-        customer_name: shippingInfo.fullName,
-        customer_phone: shippingInfo.phone,
-        customer_email: shippingInfo.email,
-        shipping_address: `${shippingInfo.address}, ${shippingInfo.ward}, ${shippingInfo.district}, ${shippingInfo.city}`,
-        note: shippingInfo.note,
-        payment_method: selectedPayment,
-        subtotal,
-        discount,
-        shipping_fee: shippingFee,
-        total,
-        coupon_code: appliedCoupon,
         status: 'pending',
-        items: cart.map(item => ({
-          product_id: item.product_id,
-          variant_id: item.variant_id,
-          quantity: item.quantity,
-          price: item.price,
-          color: item.color,
-          size: item.size
-        }))
+        total_amount: total,
+        voucher_id: selectedVoucherId, // ID từ vouchers table
+        voucher_discount: discount,
+        shipping_name: shippingInfo.fullName,
+        shipping_address: `${shippingInfo.address}, ${shippingInfo.ward}, ${shippingInfo.district}, ${shippingInfo.city}`,
+        shipping_phone: shippingInfo.phone,
+        shipping_code: null, // Sẽ được update sau khi có thông tin vận chuyển
+        shipping_provider: null, // Sẽ được update sau
       };
 
-      const { data, error } = await supabase
+      const { data: order, error: orderError } = await supabase
         .from('orders')
-        .insert([orderData])
-        .select()
+        .insert(orderData)
+        .select('id')
         .single();
 
-      if (error) throw error;
+      if (orderError) {
+        console.error('Order creation error:', orderError);
+        throw orderError;
+      }
+
+      // ✅ Tạo order items theo đúng schema
+      const orderItems = items.map(item => ({
+        order_id: order.id,
+        product_variant_id: item.product_variant_id,
+        quantity: item.quantity,
+        price: item.product_variants.price_override ||
+          item.product_variants.products.discount_price ||
+          item.product_variants.products.price
+      }));
+
+      const { error: itemsError } = await supabase
+        .from('order_items')
+        .insert(orderItems);
+
+      if (itemsError) {
+        console.error('Order items creation error:', itemsError);
+        throw itemsError;
+      }
+
+      // ✅ Cập nhật voucher usage nếu có
+      if (selectedVoucherId && user) {
+        const { error: usageError } = await supabase
+          .from('voucher_usages')
+          .insert({
+            voucher_id: selectedVoucherId,
+            user_id: user.id,
+            order_id: order.id
+          });
+
+        if (usageError) {
+          console.error('Voucher usage error:', usageError);
+          // Không throw error vì order đã tạo thành công
+        }
+      }
 
       // Clear cart after successful order
-      clearCart();
+      await clearCart();
 
       // Redirect to success page
-      router.push(`/checkout/success?orderId=${data.id}`);
-    } catch (error) {
+      router.push(`/checkout/success?orderId=${order.id}`);
+    } catch (error: any) {
       console.error('Error creating order:', error);
-      alert('Có lỗi xảy ra khi đặt hàng. Vui lòng thử lại!');
+      alert('Có lỗi xảy ra khi đặt hàng: ' + (error.message || 'Vui lòng thử lại!'));
     } finally {
       setLoading(false);
     }
@@ -295,8 +388,39 @@ export default function CheckoutPage() {
     }
   };
 
-  if (cart.length === 0) {
-    return null;
+  // Helper function để get product image
+  const getProductImage = (item: any): string => {
+    const images = item.product_variants.products.product_images;
+    if (images && images.length > 0) {
+      return images.sort((a: any, b: any) => a.sort_order - b.sort_order)[0].image_url;
+    }
+    return '/placeholder-image.jpg';
+  };
+
+  // Helper function để get product price
+  const getProductPrice = (item: any): number => {
+    return item.product_variants.price_override ||
+      item.product_variants.products.discount_price ||
+      item.product_variants.products.price;
+  };
+
+  if (items.length === 0) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-orange-50/30 via-white to-orange-50/30 flex items-center justify-center">
+        <Card className="border-0 shadow-xl bg-white rounded-3xl overflow-hidden">
+          <CardContent className="text-center py-20">
+            <ShoppingBag className="w-16 h-16 text-orange-400 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">Giỏ hàng trống</h2>
+            <p className="text-gray-600 mb-8">Vui lòng thêm sản phẩm vào giỏ hàng trước khi thanh toán.</p>
+            <Link href="/products">
+              <Button className="bg-gradient-orange hover:bg-gradient-orange-dark text-white px-8 py-4 rounded-2xl">
+                Tiếp tục mua sắm
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   return (
@@ -479,8 +603,8 @@ export default function CheckoutPage() {
                   </Label>
                   <Textarea
                     id="note"
-                    value={shippingInfo.note}
-                    onChange={(e) => handleInputChange('note', e.target.value)}
+                    // value={shippingInfo.note}
+                    // onChange={(e) => handleInputChange('note', e.target.value)}
                     placeholder="Ghi chú về đơn hàng, ví dụ: giao hàng giờ hành chính..."
                     className="rounded-xl border-orange-200 focus:border-orange-500 min-h-[80px]"
                   />
@@ -497,8 +621,8 @@ export default function CheckoutPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <RadioGroup 
-                  value={selectedPayment} 
+                <RadioGroup
+                  value={selectedPayment}
                   onValueChange={setSelectedPayment}
                   className="space-y-3"
                 >
@@ -508,19 +632,17 @@ export default function CheckoutPage() {
                       <div key={method.id} className="relative">
                         <label
                           htmlFor={method.id}
-                          className={`flex items-center p-4 rounded-2xl border-2 cursor-pointer transition-all ${
-                            selectedPayment === method.id
-                              ? 'border-orange-500 bg-orange-50'
-                              : 'border-gray-200 hover:border-orange-300'
-                          }`}
+                          className={`flex items-center p-4 rounded-2xl border-2 cursor-pointer transition-all ${selectedPayment === method.id
+                            ? 'border-orange-500 bg-orange-50'
+                            : 'border-gray-200 hover:border-orange-300'
+                            }`}
                         >
                           <RadioGroupItem value={method.id} id={method.id} className="sr-only" />
                           <div className="flex items-center gap-4 flex-1">
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                              selectedPayment === method.id
-                                ? 'bg-gradient-orange text-white'
-                                : 'bg-gray-100 text-gray-600'
-                            }`}>
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${selectedPayment === method.id
+                              ? 'bg-gradient-orange text-white'
+                              : 'bg-gray-100 text-gray-600'
+                              }`}>
                               <Icon className="w-6 h-6" />
                             </div>
                             <div className="flex-1">
@@ -581,14 +703,14 @@ export default function CheckoutPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* Cart Items */}
+                {/* Cart Items - ✅ Fixed structure */}
                 <div className="space-y-3 max-h-64 overflow-y-auto">
-                  {cart.map((item) => (
+                  {items.map((item) => (
                     <div key={item.id} className="flex gap-3 p-3 bg-gray-50 rounded-xl">
                       <div className="relative w-16 h-16 flex-shrink-0">
                         <Image
-                          src={item.image || '/placeholder-image.jpg'}
-                          alt={item.name}
+                          src={getProductImage(item)}
+                          alt={item.product_variants.products.name}
                           fill
                           className="object-cover rounded-lg"
                         />
@@ -597,16 +719,18 @@ export default function CheckoutPage() {
                         </Badge>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h4 className="text-sm font-medium text-gray-800 truncate">{item.name}</h4>
-                        {(item.color || item.size) && (
+                        <h4 className="text-sm font-medium text-gray-800 truncate">
+                          {item.product_variants.products.name}
+                        </h4>
+                        {(item.product_variants.color || item.product_variants.size) && (
                           <p className="text-xs text-gray-500">
-                            {item.color && `Màu: ${item.color}`}
-                            {item.color && item.size && ' - '}
-                            {item.size && `Size: ${item.size}`}
+                            {item.product_variants.color && `Màu: ${item.product_variants.color}`}
+                            {item.product_variants.color && item.product_variants.size && ' - '}
+                            {item.product_variants.size && `Size: ${item.product_variants.size}`}
                           </p>
                         )}
                         <p className="text-sm font-semibold text-orange-600">
-                          {(item.price * item.quantity).toLocaleString('vi-VN')}đ
+                          {(getProductPrice(item) * item.quantity).toLocaleString('vi-VN')}đ
                         </p>
                       </div>
                     </div>
@@ -694,7 +818,7 @@ export default function CheckoutPage() {
                 >
                   {loading ? (
                     <div className="flex items-center gap-2">
-                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <Loader2 className="w-5 h-5 animate-spin" />
                       Đang xử lý...
                     </div>
                   ) : (

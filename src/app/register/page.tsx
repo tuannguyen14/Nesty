@@ -1,8 +1,8 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +17,6 @@ import {
     Mail,
     Lock,
     UserPlus,
-    Sparkles,
     User,
     CheckCircle,
     Gift,
@@ -25,14 +24,21 @@ import {
     ShieldCheck,
     ArrowRight,
     AlertCircle,
-    Star
 } from "lucide-react";
 
 import Lottie from "lottie-react";
 import shoppingAnimation from "@/data/animations/shopping.json";
+import { useAuth } from '@/hooks/useAuth';
 
 export default function RegisterPage() {
     const router = useRouter();
+    const { user, loading } = useAuth();
+
+    useEffect(() => {
+        if (!loading && user) {
+            router.push('/');
+        }
+    }, [user, loading, router]);
 
     const [formData, setFormData] = useState({
         fullName: '',
@@ -41,6 +47,7 @@ export default function RegisterPage() {
         confirmPassword: ''
     });
     const [error, setError] = useState('');
+    const [success, setSuccess] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -64,69 +71,149 @@ export default function RegisterPage() {
         if (field === 'password') {
             setPasswordStrength(checkPasswordStrength(value));
         }
+
+        // Clear errors when user starts typing
+        if (error) setError('');
+        if (success) setSuccess('');
     };
 
     const validateForm = () => {
-        // if (!formData.fullName.trim()) {
-        //     setError('Vui lòng nhập họ và tên');
-        //     return false;
-        // }
+        if (!formData.fullName.trim()) {
+            setError('Vui lòng nhập họ và tên');
+            return false;
+        }
+        
         if (!formData.email) {
             setError('Vui lòng nhập email');
             return false;
         }
+
+        // Email validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(formData.email)) {
+            setError('Email không hợp lệ');
+            return false;
+        }
+        
         if (formData.password.length < 6) {
             setError('Mật khẩu phải có ít nhất 6 ký tự');
             return false;
         }
+        
         if (formData.password !== formData.confirmPassword) {
             setError('Mật khẩu xác nhận không khớp');
             return false;
         }
+        
         if (!agreeTerms) {
             setError('Vui lòng đồng ý với điều khoản sử dụng');
             return false;
         }
+        
         return true;
     };
 
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
+        setSuccess('');
 
         if (!validateForm()) return;
 
         setIsLoading(true);
 
-        const { error } = await supabase.auth.signUp({
-            email: formData.email,
-            password: formData.password,
-            options: {
-                data: {
-                    full_name: formData.fullName
+        try {
+            // Đăng ký với Supabase Auth
+            const { data, error } = await supabase.auth.signUp({
+                email: formData.email,
+                password: formData.password,
+                options: {
+                    data: {
+                        full_name: formData.fullName
+                    }
+                }
+            });
+
+            if (error) {
+                // Handle specific Supabase errors
+                if (error.message.includes('User already registered')) {
+                    setError('Email này đã được đăng ký. Vui lòng sử dụng email khác hoặc đăng nhập.');
+                } else if (error.message.includes('Invalid email')) {
+                    setError('Email không hợp lệ');
+                } else if (error.message.includes('Password')) {
+                    setError('Mật khẩu không đủ mạnh');
+                } else {
+                    setError(error.message || 'Có lỗi xảy ra khi đăng ký');
+                }
+                return;
+            }
+
+            if (data.user) {
+                if (data.user.email_confirmed_at) {
+                    // Auto confirmed - redirect to login
+                    setSuccess('Đăng ký thành công! Đang chuyển hướng...');
+                    setTimeout(() => {
+                        router.push('/login?message=Đăng ký thành công! Vui lòng đăng nhập.');
+                    }, 2000);
+                } else {
+                    // Email confirmation required
+                    setSuccess('Đăng ký thành công! Vui lòng kiểm tra email để xác thực tài khoản.');
+                    
+                    // Reset form
+                    setFormData({
+                        fullName: '',
+                        email: '',
+                        password: '',
+                        confirmPassword: ''
+                    });
+                    setAgreeTerms(false);
                 }
             }
-        });
-
-        if (error) {
-            setError(error.message);
-        } else {
-            router.push('/login?message=Vui lòng kiểm tra email để xác thực tài khoản');
+        } catch (err) {
+            console.error('Registration error:', err);
+            setError('Có lỗi xảy ra khi đăng ký. Vui lòng thử lại.');
+        } finally {
+            setIsLoading(false);
         }
-
-        setIsLoading(false);
     };
 
     const handleGoogleSignUp = async () => {
-        const { error } = await supabase.auth.signInWithOAuth({
-            provider: 'google',
-            options: {
-                redirectTo: `${window.location.origin}/auth/callback`
-            }
-        });
+        setError('');
+        
+        try {
+            const { error } = await supabase.auth.signInWithOAuth({
+                provider: 'google',
+                options: {
+                    redirectTo: `${window.location.origin}/auth/callback`
+                }
+            });
 
-        if (error) {
-            setError(error.message);
+            if (error) {
+                setError('Không thể đăng ký với Google. Vui lòng thử lại.');
+            }
+        } catch (err) {
+            console.error('Google signup error:', err);
+            setError('Có lỗi xảy ra với đăng ký Google');
+        }
+    };
+
+    const handleFacebookSignUp = async () => {
+        setError('');
+        
+        try {
+            const { error } = await supabase.auth.signInWithOAuth({
+                provider: 'facebook',
+                options: {
+                    redirectTo: `${window.location.origin}/auth/callback`
+                }
+            });
+
+            if (error) {
+                setError('Không thể đăng ký với Facebook. Vui lòng thử lại.');
+            }
+        } catch (err) {
+            console.error('Facebook signup error:', err);
+            setError('Có lỗi xảy ra với đăng ký Facebook');
         }
     };
 
@@ -142,6 +229,18 @@ export default function RegisterPage() {
         if (passwordStrength <= 3) return 'Trung bình';
         return 'Mạnh';
     };
+
+    // Show loading while checking auth
+    if (loading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 via-white to-amber-50">
+                <div className="flex items-center space-x-2">
+                    <div className="w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+                    <span className="text-gray-600">Đang tải...</span>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 via-white to-amber-50 p-4">
@@ -246,6 +345,7 @@ export default function RegisterPage() {
                     </CardHeader>
 
                     <CardContent className="space-y-6">
+                        {/* Error Alert */}
                         {error && (
                             <Alert className="border-red-200 bg-red-50">
                                 <AlertCircle className="h-4 w-4 text-red-600" />
@@ -255,8 +355,18 @@ export default function RegisterPage() {
                             </Alert>
                         )}
 
+                        {/* Success Alert */}
+                        {success && (
+                            <Alert className="border-green-200 bg-green-50">
+                                <CheckCircle className="h-4 w-4 text-green-600" />
+                                <AlertDescription className="text-green-700">
+                                    {success}
+                                </AlertDescription>
+                            </Alert>
+                        )}
+
                         <form onSubmit={handleRegister} className="space-y-4">
-                            {/* <div className="space-y-2">
+                            <div className="space-y-2">
                                 <Label htmlFor="fullName" className="text-sm font-medium text-gray-700">
                                     Họ và tên
                                 </Label>
@@ -265,13 +375,14 @@ export default function RegisterPage() {
                                     <Input
                                         id="fullName"
                                         type="text"
+                                        placeholder="Nhập họ và tên"
                                         value={formData.fullName}
                                         onChange={(e) => handleInputChange('fullName', e.target.value)}
                                         className="pl-10 h-12 rounded-xl border-orange-200 focus:border-orange-500 transition-all"
                                         required
                                     />
                                 </div>
-                            </div> */}
+                            </div>
 
                             <div className="space-y-2">
                                 <Label htmlFor="email" className="text-sm font-medium text-gray-700">
@@ -325,8 +436,8 @@ export default function RegisterPage() {
                                         <div className="flex items-center justify-between text-xs">
                                             <span className="text-gray-500">Độ mạnh mật khẩu:</span>
                                             <span className={`font-medium ${passwordStrength <= 2 ? 'text-red-500' :
-                                                    passwordStrength <= 3 ? 'text-yellow-500' :
-                                                        'text-green-500'
+                                                passwordStrength <= 3 ? 'text-yellow-500' :
+                                                    'text-green-500'
                                                 }`}>
                                                 {getPasswordStrengthText()}
                                             </span>
@@ -389,7 +500,7 @@ export default function RegisterPage() {
                                     onCheckedChange={(checked) => setAgreeTerms(checked as boolean)}
                                     className="mt-1 flex-shrink-0"
                                 />
-                                <Label htmlFor="terms" className="text-sm text-gray-600 cursor-pointer leading-relaxed whitespace-nowrap">
+                                <Label htmlFor="terms" className="text-sm text-gray-600 cursor-pointer leading-relaxed">
                                     Tôi đồng ý với{" "}
                                     <Link href="/terms" className="text-orange-600 hover:text-orange-700 font-medium">
                                         Điều khoản sử dụng
@@ -434,6 +545,7 @@ export default function RegisterPage() {
                                 type="button"
                                 variant="outline"
                                 onClick={handleGoogleSignUp}
+                                disabled={isLoading}
                                 className="w-full h-12 border-gray-200 hover:bg-gray-50 rounded-xl transition-all font-medium"
                             >
                                 <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
@@ -448,6 +560,8 @@ export default function RegisterPage() {
                             <Button
                                 type="button"
                                 variant="outline"
+                                onClick={handleFacebookSignUp}
+                                disabled={isLoading}
                                 className="w-full h-12 border-gray-200 hover:bg-gray-50 rounded-xl transition-all font-medium"
                             >
                                 <svg className="w-5 h-5 mr-2" fill="#1877F2" viewBox="0 0 24 24">

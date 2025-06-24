@@ -5,7 +5,8 @@ CREATE TABLE
         color TEXT,
         size TEXT,
         price_override NUMERIC(10, 2),
-        stock INT DEFAULT 0
+        stock INT DEFAULT 0,
+        sku TEXT UNIQUE
     );
 
 ALTER TABLE product_variants ADD CONSTRAINT unique_product_variant UNIQUE (product_id, color, size);

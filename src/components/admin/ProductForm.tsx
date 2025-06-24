@@ -53,7 +53,7 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
     const uploadImageToBucket = async (file: File): Promise<string> => {
         const fileExt = file.name.split('.').pop();
         const filePath = `product-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
-        
+
         try {
             // Upload
             const { data, error } = await supabase.storage
@@ -67,11 +67,11 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
 
             // Lấy public URL
             const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(filePath);
-            
+
             if (!urlData.publicUrl) {
                 throw new Error('Failed to get public URL');
             }
-            
+
             return urlData.publicUrl;
         } catch (error) {
             console.error('Upload image error:', error);
@@ -81,14 +81,14 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
 
     const handleImageUpload = async (index: number, file: File) => {
         if (!file) return;
-        
+
         try {
             // Set loading state for specific image
             setUploadingImages(prev => ({ ...prev, [index]: true }));
-            
+
             const url = await uploadImageToBucket(file);
             updateImage(index, 'image_url', url);
-            
+
         } catch (error: any) {
             console.error('Upload failed:', error);
             alert(`Upload hình ảnh thất bại: ${error.message || 'Lỗi không xác định'}`);
@@ -121,115 +121,176 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
     };
 
     const createProduct = async () => {
-        // Create product
-        const { data: productData, error: productError } = await supabase
-            .from('products')
-            .insert({
-                name: formData.name,
-                description: formData.description,
-                price: formData.price,
-                discount_price: formData.discount_price || null,
-                discount_start: formData.discount_start || null,
-                discount_end: formData.discount_end || null,
-                category_id: formData.category_id || null,
-            })
-            .select()
-            .single();
+        try {
+            // 1. Create product first
+            const { data: productData, error: productError } = await supabase
+                .from('products')
+                .insert({
+                    name: formData.name,
+                    description: formData.description || null,
+                    price: formData.price,
+                    discount_price: formData.discount_price || null,
+                    discount_start: formData.discount_start || null,
+                    discount_end: formData.discount_end || null,
+                    category_id: formData.category_id || null,
+                })
+                .select('id')
+                .single();
 
-        if (productError) throw productError;
+            if (productError) {
+                console.error('Product creation error:', productError);
+                throw productError;
+            }
 
-        const productId = productData.id;
+            const productId = productData.id;
+            console.log('Created product with ID:', productId);
 
-        // Create images
-        if (formData.images.length > 0) {
-            const imagesData = formData.images.map(img => ({
-                product_id: productId,
-                image_url: img.image_url,
-                sort_order: img.sort_order
-            }));
+            // 2. Create images if any
+            if (formData.images.length > 0) {
+                const imagesData = formData.images
+                    .filter(img => img.image_url && img.image_url.trim() !== '') // Only valid images
+                    .map(img => ({
+                        product_id: productId,
+                        image_url: img.image_url,
+                        sort_order: img.sort_order || 0
+                    }));
 
-            const { error: imagesError } = await supabase
-                .from('product_images')
-                .insert(imagesData);
+                if (imagesData.length > 0) {
+                    console.log('Inserting images:', imagesData);
 
-            if (imagesError) throw imagesError;
-        }
+                    const { error: imagesError } = await supabase
+                        .from('product_images')
+                        .insert(imagesData);
 
-        // Create variants
-        if (formData.variants.length > 0) {
-            const variantsData = formData.variants.map(variant => ({
-                product_id: productId,
-                color: variant.color,
-                size: variant.size,
-                price_override: variant.price_override || null,
-                stock: variant.stock
-            }));
+                    if (imagesError) {
+                        console.error('Images creation error:', imagesError);
+                        throw new Error(`Lỗi tạo hình ảnh: ${imagesError.message}`);
+                    }
+                }
+            }
 
-            const { error: variantsError } = await supabase
-                .from('product_variants')
-                .insert(variantsData);
+            // 3. Create variants if any
+            if (formData.variants.length > 0) {
+                const variantsData = formData.variants.map(variant => ({
+                    product_id: productId,
+                    color: variant.color || null,
+                    size: variant.size || null,
+                    price_override: variant.price_override || null,
+                    stock: variant.stock || 0
+                }));
 
-            if (variantsError) throw variantsError;
+                console.log('Inserting variants:', variantsData);
+
+                const { error: variantsError } = await supabase
+                    .from('product_variants')
+                    .insert(variantsData);
+
+                if (variantsError) {
+                    console.error('Variants creation error:', variantsError);
+                    throw new Error(`Lỗi tạo biến thể: ${variantsError.message}`);
+                }
+            }
+
+            console.log('Product created successfully');
+
+        } catch (error) {
+            console.error('Create product error:', error);
+            throw error;
         }
     };
 
     const updateProduct = async () => {
         if (!product) return;
 
-        // Update product
-        const { error: productError } = await supabase
-            .from('products')
-            .update({
-                name: formData.name,
-                description: formData.description,
-                price: formData.price,
-                discount_price: formData.discount_price || null,
-                discount_start: formData.discount_start || null,
-                discount_end: formData.discount_end || null,
-                category_id: formData.category_id || null,
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', product.id);
+        try {
+            // 1. Update product
+            const { error: productError } = await supabase
+                .from('products')
+                .update({
+                    name: formData.name,
+                    description: formData.description || null,
+                    price: formData.price,
+                    discount_price: formData.discount_price || null,
+                    discount_start: formData.discount_start || null,
+                    discount_end: formData.discount_end || null,
+                    category_id: formData.category_id || null
+                })
+                .eq('id', product.id);
 
-        if (productError) throw productError;
+            if (productError) {
+                console.error('Product update error:', productError);
+                throw productError;
+            }
 
-        // Delete old images and variants
-        await supabase.from('product_images').delete().eq('product_id', product.id);
-        await supabase.from('product_variants').delete().eq('product_id', product.id);
-
-        // Create new images
-        if (formData.images.length > 0) {
-            const imagesData = formData.images.map(img => ({
-                product_id: product.id,
-                image_url: img.image_url,
-                sort_order: img.sort_order
-            }));
-
-            const { error: imagesError } = await supabase
+            // 2. Delete old images and variants
+            const { error: deleteImagesError } = await supabase
                 .from('product_images')
-                .insert(imagesData);
+                .delete()
+                .eq('product_id', product.id);
 
-            if (imagesError) throw imagesError;
-        }
+            if (deleteImagesError) {
+                console.error('Delete images error:', deleteImagesError);
+            }
 
-        // Create new variants
-        if (formData.variants.length > 0) {
-            const variantsData = formData.variants.map(variant => ({
-                product_id: product.id,
-                color: variant.color,
-                size: variant.size,
-                price_override: variant.price_override || null,
-                stock: variant.stock
-            }));
-
-            const { error: variantsError } = await supabase
+            const { error: deleteVariantsError } = await supabase
                 .from('product_variants')
-                .insert(variantsData);
+                .delete()
+                .eq('product_id', product.id);
 
-            if (variantsError) throw variantsError;
+            if (deleteVariantsError) {
+                console.error('Delete variants error:', deleteVariantsError);
+            }
+
+            // 3. Create new images
+            if (formData.images.length > 0) {
+                const imagesData = formData.images
+                    .filter(img => img.image_url && img.image_url.trim() !== '')
+                    .map(img => ({
+                        product_id: product.id,
+                        image_url: img.image_url,
+                        sort_order: img.sort_order || 0
+                    }));
+
+                if (imagesData.length > 0) {
+                    const { error: imagesError } = await supabase
+                        .from('product_images')
+                        .insert(imagesData);
+
+                    if (imagesError) {
+                        console.error('Images update error:', imagesError);
+                        throw new Error(`Lỗi cập nhật hình ảnh: ${imagesError.message}`);
+                    }
+                }
+            }
+
+            // 4. Create new variants
+            if (formData.variants.length > 0) {
+                const variantsData = formData.variants.map(variant => ({
+                    product_id: product.id,
+                    color: variant.color || null,
+                    size: variant.size || null,
+                    price_override: variant.price_override || null,
+                    stock: variant.stock || 0
+                }));
+
+                const { error: variantsError } = await supabase
+                    .from('product_variants')
+                    .insert(variantsData);
+
+                if (variantsError) {
+                    console.error('Variants update error:', variantsError);
+                    throw new Error(`Lỗi cập nhật biến thể: ${variantsError.message}`);
+                }
+            }
+
+            console.log('Product updated successfully');
+
+        } catch (error) {
+            console.error('Update product error:', error);
+            throw error;
         }
     };
-
+    
     const addImage = () => {
         setFormData(prev => ({
             ...prev,

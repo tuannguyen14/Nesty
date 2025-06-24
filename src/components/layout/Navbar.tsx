@@ -3,18 +3,18 @@
 import Link from 'next/link';
 import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
-import { useSupabaseCart } from '@/hooks/useSupabaseCart'; // Thay đổi import
+import { useCart } from '@/contexts/CartProvider'; // Thay đổi import
 import { Search, ShoppingCart, User, Menu, X, ChevronDown, Phone, MapPin, Info } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 
 import { Category } from '@/types/category';
-import { MenuType } from '@/types/MenuType';
+import { MenuType } from '@/types/menuType';
 
 
 export default function Navbar() {
     const { user, loading, logout } = useAuth();
-    const { totalItems, loading: cartLoading } = useSupabaseCart(); // Sử dụng Supabase cart
+    const { totalItems, loading: cartLoading } = useCart(); // Sử dụng Global Cart Context
 
     const [categories, setCategories] = useState<Category[]>([]);
     const [categoriesLoading, setCategoriesLoading] = useState(true);
@@ -41,9 +41,7 @@ export default function Navbar() {
             setCategoriesLoading(true);
             const { data, error } = await supabase
                 .from('categories')
-                .select('*')
-            // .eq('is_active', true)
-            // .order('name', { ascending: true });
+                .select('*');
 
             if (error) {
                 console.error('Error fetching categories:', error);
@@ -222,14 +220,14 @@ export default function Navbar() {
                                 <span className="text-sm font-medium hidden lg:inline">Về chúng tôi</span>
                             </Link>
 
-                            {/* Cart - Updated to use Supabase cart */}
+                            {/* Cart - Now using Global Cart Context */}
                             <Link
                                 href="/cart"
                                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl hover:bg-orange-50 text-gray-700 hover:text-orange-600 transition-all duration-300 relative group"
                             >
                                 <div className="relative">
                                     <ShoppingCart size={20} />
-                                    {/* Show loading state or cart count */}
+                                    {/* Cart Badge - Now synced globally */}
                                     {cartLoading ? (
                                         <span className="absolute -top-2 -right-2 bg-gray-400 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
                                             <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
@@ -336,7 +334,7 @@ export default function Navbar() {
                             </button>
                             <Link href="/cart" className="p-2.5 rounded-xl hover:bg-orange-50 text-gray-700 hover:text-orange-600 transition-all duration-300 relative">
                                 <ShoppingCart size={20} />
-                                {/* Mobile cart badge - Updated */}
+                                {/* Mobile cart badge - Now synced globally */}
                                 {cartLoading ? (
                                     <span className="absolute -top-1 -right-1 bg-gray-400 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
                                         <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>

@@ -16,7 +16,7 @@ interface ProductsPageProps {
 export default async function ProductsPage({ searchParams }: ProductsPageProps) {
   // Await searchParams để tránh warning của Next.js 15
   const params = await searchParams;
-  
+
   const {
     search = '',
     category = '',
@@ -32,31 +32,12 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
   let query = supabase
     .from('products')
     .select(`
-      *,
-      categories (
-        id,
-        name,
-        description,
-        slug
-      ),
-      product_images (
-        id,
-        product_id,
-        image_url,
-        sort_order,
-        created_at
-      ),
-      product_variants (
-        id,
-        product_id,
-        color,
-        size,
-        price_override,
-        stock,
-        created_at,
-        updated_at
-      )
-    `, { count: 'exact' });
+        *,
+        product_images(*),
+        product_variants(*)
+      `)
+    .order('created_at', { ascending: false })
+    .limit(8);
 
   // Apply search filter
   if (search) {
@@ -71,7 +52,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
       .select('id')
       .eq('slug', category)
       .single();
-    
+
     if (categoryData) {
       query = query.eq('category_id', categoryData.id);
     }
@@ -102,10 +83,10 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
   // Apply pagination
   query = query.range(offset, offset + itemsPerPage - 1);
 
-  const { data: products, error, count } = await query as { 
-    data: ProductWithRelations[] | null, 
+  const { data: products, error, count } = await query as {
+    data: ProductWithRelations[] | null,
     error: any,
-    count: number | null 
+    count: number | null
   };
 
   if (error) {

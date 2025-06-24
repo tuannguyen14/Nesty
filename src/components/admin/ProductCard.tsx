@@ -1,15 +1,15 @@
+// ProductCard.tsx - Fixed to use ProductWithDetails
 import Link from 'next/link';
 import Image from 'next/image';
 import dayjs from 'dayjs';
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clock, Package, Palette, Ruler, Zap, TrendingUp, Star } from 'lucide-react';
-import { ProductWithRelations, ProductImage } from '@/types/product';
-import { useProductInfo } from '@/hooks/useProductInfo';
+import { ProductWithDetails, ProductImage } from '@/types/product';
 import { getColorStyle } from '@/utils/colorUtils';
 
 interface ProductCardProps {
-  product: ProductWithRelations;
+  product: ProductWithDetails;
   viewMode?: 'grid' | 'list';
   animationDelay?: number;
 }
@@ -21,10 +21,10 @@ export function ProductCard({
 }: ProductCardProps) {
   const {
     id, slug, name, price, discount_price,
-    discount_start, discount_end, categories, product_images
+    discount_start, discount_end, category, images,
+    totalStock, availableColors, availableSizes
   } = product;
 
-  const { totalStock, availableColors, availableSizes } = useProductInfo(product);
   const now = dayjs();
 
   // Check if discount is valid
@@ -36,8 +36,8 @@ export function ProductCard({
     now.isBefore(dayjs(discount_end));
 
   // Get first image
-  const firstImage = product_images?.length > 0
-    ? [...product_images].sort((a: ProductImage, b: ProductImage) => a.sort_order - b.sort_order)[0]
+  const firstImage = images?.length > 0
+    ? [...images].sort((a: ProductImage, b: ProductImage) => a.sort_order - b.sort_order)[0]
     : null;
   const imageUrl = firstImage?.image_url || '/placeholder-image.jpg';
 
@@ -81,7 +81,7 @@ export function ProductCard({
                   -{discountPercent}%
                 </Badge>
               )}
-              {totalStock <= 5 && totalStock > 0 && (
+              {totalStock && totalStock <= 5 && totalStock > 0 && (
                 <Badge className="bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg px-2 py-1 text-xs rounded-full">
                   <TrendingUp className="w-3 h-3 mr-1" />
                   Còn {totalStock}
@@ -90,10 +90,10 @@ export function ProductCard({
             </div>
 
             {/* Category Badge */}
-            {categories && (
+            {category && (
               <div className="absolute top-3 right-3 z-10">
                 <Badge variant="secondary" className="bg-white/90 backdrop-blur-sm text-gray-700 shadow-md px-3 py-1 text-xs rounded-full">
-                  {categories.name}
+                  {category.name}
                 </Badge>
               </div>
             )}
@@ -131,7 +131,7 @@ export function ProductCard({
 
             {/* Features */}
             <div className="flex items-center gap-3 mb-3">
-              {availableColors.length > 0 && (
+              {availableColors && availableColors.length > 0 && (
                 <div className="flex items-center gap-1">
                   <Palette className="w-3.5 h-3.5 text-orange-400" />
                   <span className="text-xs text-gray-600">
@@ -139,7 +139,7 @@ export function ProductCard({
                   </span>
                 </div>
               )}
-              {availableSizes.length > 0 && (
+              {availableSizes && availableSizes.length > 0 && (
                 <div className="flex items-center gap-1">
                   <Ruler className="w-3.5 h-3.5 text-orange-400" />
                   <span className="text-xs text-gray-600">
@@ -178,7 +178,7 @@ export function ProductCard({
             <div className="flex items-center justify-between text-xs text-gray-500 mt-3 pt-3 border-t border-orange-100">
               <div className="flex items-center gap-1">
                 <Package className="w-3 h-3" />
-                <span>Kho: {totalStock}</span>
+                <span>Kho: {totalStock || 0}</span>
               </div>
 
               {isDiscount && discount_end && (
@@ -190,7 +190,7 @@ export function ProductCard({
             </div>
 
             {/* Color swatches preview */}
-            {availableColors.length > 0 && (
+            {availableColors && availableColors.length > 0 && (
               <div className="flex items-center gap-1 mt-3">
                 {availableColors.slice(0, 4).map((color, index) => (
                   <div
