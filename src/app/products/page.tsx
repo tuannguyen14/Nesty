@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase';
 import { ProductWithRelations } from '@/types/product';
 import { ProductsPageClient } from '@/components/products/ProductsPageClient';
 
+
 interface SearchParams {
   search?: string;
   category?: string;

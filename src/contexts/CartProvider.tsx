@@ -15,6 +15,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
+  // 🔥 THÊM: Flag để track initialization
+  const [isInitialized, setIsInitialized] = useState(false);
+  
   // Refs for stability
   const userIdRef = useRef<string | null>(null);
   const lastFetchTimeRef = useRef<number>(0);
@@ -23,6 +26,14 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Enhanced fetch function with better error handling
   const fetchCartItems = useCallback(async (force = false) => {
+    console.log('🛒 fetchCartItems called:', { 
+      loading, 
+      force, 
+      authLoading, 
+      userId: user?.id,
+      isInitialized: isInitializedRef.current 
+    });
+
     if (loading && !force) {
       console.log('🔄 Fetch already in progress, skipping...');
       return;
@@ -37,6 +48,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('👤 No user, clearing cart items');
       setItems([]);
       setError(null);
+      setIsInitialized(true); // 🔥 SET INITIALIZED EVEN WITHOUT USER
       isInitializedRef.current = true;
       return;
     }
@@ -46,6 +58,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('🔄 User changed, forcing refresh');
       userIdRef.current = user.id;
       isInitializedRef.current = false;
+      setIsInitialized(false); // 🔥 RESET INITIALIZATION
       force = true;
     }
 
@@ -116,6 +129,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       console.log(`✅ Cart loaded: ${validItems.length} items`);
       setItems(validItems);
+      setIsInitialized(true); // 🔥 SET INITIALIZED AFTER SUCCESS
       isInitializedRef.current = true;
 
     } catch (err: any) {
@@ -125,15 +139,24 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       console.error('❌ Cart fetch error:', err);
       setError('Không thể tải giỏ hàng');
+      setIsInitialized(true); // 🔥 SET INITIALIZED EVEN ON ERROR
+      isInitializedRef.current = true;
     } finally {
       setLoading(false);
     }
   }, [user?.id, authLoading, loading]);
 
-  // Initialize cart when user is ready
+  // 🔥 IMPROVED: Initialize cart when auth is ready
   useEffect(() => {
-    if (!authLoading && user && !isInitializedRef.current) {
-      console.log('🚀 Initializing cart for user:', user.id);
+    console.log('🚀 Auth effect:', { 
+      authLoading, 
+      userId: user?.id, 
+      isInitialized: isInitializedRef.current 
+    });
+
+    // Always try to initialize when auth is ready
+    if (!authLoading && !isInitializedRef.current) {
+      console.log('🚀 Initializing cart...');
       fetchCartItems(true);
     }
   }, [user?.id, authLoading, fetchCartItems]);
@@ -377,15 +400,16 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       totalItems,
       subtotal,
       loading,
-      error
+      error,
+      isInitialized // 🔥 ADD TO DEBUG
     });
-  }, [items, totalItems, subtotal, loading, error]);
+  }, [items, totalItems, subtotal, loading, error, isInitialized]);
 
   const contextValue: UseSupabaseCartReturn = {
     items,
     totalItems,
     subtotal,
-    loading,
+    loading: loading || !isInitialized, // 🔥 INCLUDE INITIALIZATION IN LOADING
     error,
     addToCart,
     removeFromCart,

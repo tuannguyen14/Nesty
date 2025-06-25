@@ -14,10 +14,10 @@ interface ProductCardProps {
   animationDelay?: number;
 }
 
-export function ProductCard({ 
-  product, 
+export function ProductCard({
+  product,
   viewMode = 'grid',
-  animationDelay = 0 
+  animationDelay = 0
 }: ProductCardProps) {
   const {
     id, slug, name, price, discount_price,
@@ -25,6 +25,7 @@ export function ProductCard({
   } = product;
 
   const { totalStock, availableColors, availableSizes } = useProductInfo(product);
+
   const now = dayjs();
 
   // Check if discount is valid
@@ -58,13 +59,11 @@ export function ProductCard({
       }}
     >
       <Link href={`/products/${slug}`}>
-        <Card className={`h-full rounded-3xl shadow-lg transition-all duration-300 hover:shadow-2xl hover:-translate-y-2 border-0 overflow-hidden bg-white group-hover:bg-gradient-to-br group-hover:from-white group-hover:to-blue-50 ${
-          viewMode === 'list' ? 'flex' : ''
-        }`}>
-          {/* Image Container */}
-          <div className={`relative overflow-hidden ${
-            viewMode === 'list' ? 'w-48 h-48 flex-shrink-0' : 'aspect-square'
+        <Card className={`h-full rounded-3xl shadow-lg transition-all duration-300 hover:shadow-2xl hover:-translate-y-2 border-0 overflow-hidden bg-white group-hover:bg-gradient-to-br group-hover:from-white group-hover:to-blue-50 ${viewMode === 'list' ? 'flex' : ''
           }`}>
+          {/* Image Container */}
+          <div className={`relative overflow-hidden ${viewMode === 'list' ? 'w-48 h-48 flex-shrink-0' : 'aspect-square'
+            }`}>
             <Image
               src={imageUrl}
               alt={name}

@@ -97,6 +97,7 @@ export function CheckoutSuccessPage() {
     fetchOrderInfo();
   }, [orderId, supabase]);
 
+
   // Trigger confetti animation
   useEffect(() => {
     if (orderInfo) {
@@ -133,6 +134,7 @@ export function CheckoutSuccessPage() {
 
       return () => clearInterval(interval);
     }
+    return undefined;
   }, [orderInfo]);
 
   const copyOrderCode = () => {
@@ -140,16 +142,6 @@ export function CheckoutSuccessPage() {
       navigator.clipboard.writeText(orderInfo.order_code);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  const shareOrder = () => {
-    if (navigator.share && orderInfo) {
-      navigator.share({
-        title: 'Đơn hàng của tôi',
-        text: `Mã đơn hàng: ${orderInfo.order_code}`,
-        url: window.location.href
-      });
     }
   };
 

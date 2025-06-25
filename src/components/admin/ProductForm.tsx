@@ -25,6 +25,7 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
         images: [],
         variants: []
     });
+    
 
     useEffect(() => {
         if (product) {
@@ -51,30 +52,71 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
     }, [product]);
 
     const uploadImageToBucket = async (file: File): Promise<string> => {
+        // Validate file size (max 5MB)
+        const maxSize = 5 * 1024 * 1024; // 5MB
+        if (file.size > maxSize) {
+            throw new Error('File quá lớn. Kích thước tối đa 5MB.');
+        }
+
+        // Validate file type
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        if (!allowedTypes.includes(file.type)) {
+            throw new Error('Định dạng file không hỗ trợ. Chỉ chấp nhận JPG, PNG, GIF, WebP.');
+        }
+
         const fileExt = file.name.split('.').pop();
-        const filePath = `product-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+        const filePath = `products/${fileName}.${fileExt}`;
 
         try {
-            // Upload
-            const { data, error } = await supabase.storage
+            console.log('Starting upload:', filePath);
+
+            // Upload with timeout
+            const uploadPromise = supabase.storage
                 .from('product-images')
-                .upload(filePath, file, { cacheControl: '3600', upsert: false });
+                .upload(filePath, file, {
+                    cacheControl: '3600',
+                    upsert: false
+                });
+
+            // Add timeout (30 seconds)
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('Upload timeout - quá 30 giây')), 30000);
+            });
+
+            const { data, error } = await Promise.race([uploadPromise, timeoutPromise]) as any;
 
             if (error) {
                 console.error('Upload error:', error);
-                throw new Error(`Upload failed: ${error.message}`);
+                throw new Error(`Upload thất bại: ${error.message}`);
             }
 
-            // Lấy public URL
-            const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(filePath);
+            console.log('Upload successful:', data);
+
+            // Get public URL
+            const { data: urlData } = supabase.storage
+                .from('product-images')
+                .getPublicUrl(filePath);
 
             if (!urlData.publicUrl) {
-                throw new Error('Failed to get public URL');
+                throw new Error('Không thể lấy URL công khai');
             }
 
+            console.log('Public URL:', urlData.publicUrl);
             return urlData.publicUrl;
-        } catch (error) {
+
+        } catch (error: any) {
             console.error('Upload image error:', error);
+
+            // Clean up failed upload
+            try {
+                await supabase.storage
+                    .from('product-images')
+                    .remove([filePath]);
+            } catch (cleanupError) {
+                console.error('Cleanup error:', cleanupError);
+            }
+
             throw error;
         }
     };
@@ -82,19 +124,53 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
     const handleImageUpload = async (index: number, file: File) => {
         if (!file) return;
 
+        console.log(`Starting upload for index ${index}:`, file.name, file.size, file.type);
+
         try {
-            // Set loading state for specific image
+            // Set loading state
             setUploadingImages(prev => ({ ...prev, [index]: true }));
 
+            // Upload image
             const url = await uploadImageToBucket(file);
+
+            // Update form data
             updateImage(index, 'image_url', url);
 
+            console.log(`Upload completed for index ${index}:`, url);
+
         } catch (error: any) {
-            console.error('Upload failed:', error);
-            alert(`Upload hình ảnh thất bại: ${error.message || 'Lỗi không xác định'}`);
+            console.error(`Upload failed for index ${index}:`, error);
+
+            // Show user-friendly error message
+            let errorMessage = 'Lỗi không xác định';
+
+            if (error.message.includes('timeout')) {
+                errorMessage = 'Upload quá chậm, vui lòng thử lại';
+            } else if (error.message.includes('File quá lớn')) {
+                errorMessage = 'File quá lớn (tối đa 5MB)';
+            } else if (error.message.includes('Định dạng file')) {
+                errorMessage = 'Định dạng file không hỗ trợ';
+            } else if (error.message.includes('insufficient_scope') || error.message.includes('permission')) {
+                errorMessage = 'Không có quyền upload. Vui lòng liên hệ admin';
+            } else {
+                errorMessage = error.message || 'Upload thất bại';
+            }
+
+            alert(`Upload hình ảnh thất bại: ${errorMessage}`);
+
+            // Clear the file input
+            const fileInput = document.querySelector(`input[type="file"][data-index="${index}"]`) as HTMLInputElement;
+            if (fileInput) {
+                fileInput.value = '';
+            }
+
         } finally {
             // Always reset loading state
-            setUploadingImages(prev => ({ ...prev, [index]: false }));
+            setUploadingImages(prev => {
+                const newState = { ...prev };
+                delete newState[index];
+                return newState;
+            });
         }
     };
 
@@ -290,7 +366,7 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
             throw error;
         }
     };
-    
+
     const addImage = () => {
         setFormData(prev => ({
             ...prev,
@@ -461,6 +537,7 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
                         </button>
                     </div>
 
+                     {/* Trong phần render images của ProductForm */}
                     {formData.images.map((image, index) => (
                         <div key={index} className="flex gap-4 items-center mb-4 p-4 border rounded-md">
                             {/* Preview */}
@@ -469,6 +546,10 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
                                     src={image.image_url}
                                     alt="preview"
                                     className="w-16 h-16 object-cover rounded"
+                                    onError={(e) => {
+                                        console.error('Image load error:', e);
+                                        (e.target as HTMLImageElement).style.display = 'none';
+                                    }}
                                 />
                             )}
 
@@ -477,6 +558,7 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
                                 <input
                                     type="file"
                                     accept="image/*"
+                                    data-index={index}
                                     disabled={uploadingImages[index]}
                                     onChange={(e) => {
                                         const file = e.target.files?.[0];
@@ -484,22 +566,44 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
                                             handleImageUpload(index, file);
                                         }
                                     }}
-                                    className="w-full"
+                                    className="w-full disabled:opacity-50 disabled:cursor-not-allowed"
                                 />
+
+                                {/* Loading indicator */}
                                 {uploadingImages[index] && (
-                                    <div className="text-sm text-blue-600 mt-1">
-                                        Đang upload...
+                                    <div className="flex items-center mt-2">
+                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                                        <span className="text-sm text-blue-600">
+                                            Đang upload...
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                // Force reset loading state
+                                                setUploadingImages(prev => {
+                                                    const newState = { ...prev };
+                                                    delete newState[index];
+                                                    return newState;
+                                                });
+                                            }}
+                                            className="ml-2 text-xs text-red-600 hover:text-red-800"
+                                        >
+                                            Hủy
+                                        </button>
                                     </div>
                                 )}
-                                {image.image_url && (
+
+                                {/* URL display */}
+                                {image.image_url && !uploadingImages[index] && (
                                     <input
                                         type="text"
                                         value={image.image_url}
                                         readOnly
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md mt-2 bg-gray-50"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md mt-2 bg-gray-50 text-sm"
                                     />
                                 )}
                             </div>
+
                             <div className="w-24">
                                 <input
                                     type="number"
@@ -508,8 +612,10 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
                                     value={image.sort_order}
                                     onChange={(e) => updateImage(index, 'sort_order', Number(e.target.value))}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    disabled={uploadingImages[index]}
                                 />
                             </div>
+
                             <button
                                 type="button"
                                 onClick={() => removeImage(index)}
@@ -562,6 +668,17 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
                                     min="0"
                                     value={variant.stock}
                                     onChange={(e) => updateVariant(index, 'stock', Number(e.target.value))}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                            </div>
+
+                            <div>
+                                <div>Giá</div>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    value={variant.price_override}
+                                    onChange={(e) => updateVariant(index, 'price_override', Number(e.target.value))}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 />
                             </div>

@@ -82,7 +82,7 @@ export default function RegisterPage() {
             setError('Vui lòng nhập họ và tên');
             return false;
         }
-        
+
         if (!formData.email) {
             setError('Vui lòng nhập email');
             return false;
@@ -94,22 +94,22 @@ export default function RegisterPage() {
             setError('Email không hợp lệ');
             return false;
         }
-        
+
         if (formData.password.length < 6) {
             setError('Mật khẩu phải có ít nhất 6 ký tự');
             return false;
         }
-        
+
         if (formData.password !== formData.confirmPassword) {
             setError('Mật khẩu xác nhận không khớp');
             return false;
         }
-        
+
         if (!agreeTerms) {
             setError('Vui lòng đồng ý với điều khoản sử dụng');
             return false;
         }
-        
+
         return true;
     };
 
@@ -153,12 +153,13 @@ export default function RegisterPage() {
                     // Auto confirmed - redirect to login
                     setSuccess('Đăng ký thành công! Đang chuyển hướng...');
                     setTimeout(() => {
-                        router.push('/login?message=Đăng ký thành công! Vui lòng đăng nhập.');
+                        // router.push('/login?message=Đăng ký thành công! Vui lòng đăng nhập.');
+                        router.push('/');
                     }, 2000);
                 } else {
                     // Email confirmation required
                     setSuccess('Đăng ký thành công! Vui lòng kiểm tra email để xác thực tài khoản.');
-                    
+
                     // Reset form
                     setFormData({
                         fullName: '',
@@ -179,7 +180,7 @@ export default function RegisterPage() {
 
     const handleGoogleSignUp = async () => {
         setError('');
-        
+
         try {
             const { error } = await supabase.auth.signInWithOAuth({
                 provider: 'google',
@@ -199,7 +200,7 @@ export default function RegisterPage() {
 
     const handleFacebookSignUp = async () => {
         setError('');
-        
+
         try {
             const { error } = await supabase.auth.signInWithOAuth({
                 provider: 'facebook',
@@ -500,7 +501,10 @@ export default function RegisterPage() {
                                     onCheckedChange={(checked) => setAgreeTerms(checked as boolean)}
                                     className="mt-1 flex-shrink-0"
                                 />
-                                <Label htmlFor="terms" className="text-sm text-gray-600 cursor-pointer leading-relaxed">
+                                <Label
+                                    htmlFor="terms"
+                                    className="text-sm text-gray-600 cursor-pointer leading-relaxed whitespace-nowrap"
+                                >
                                     Tôi đồng ý với{" "}
                                     <Link href="/terms" className="text-orange-600 hover:text-orange-700 font-medium">
                                         Điều khoản sử dụng
@@ -511,6 +515,7 @@ export default function RegisterPage() {
                                     </Link>
                                 </Label>
                             </div>
+
 
                             <Button
                                 type="submit"

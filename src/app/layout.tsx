@@ -2,7 +2,13 @@ import "./globals.css";
 import Navbar from '@/components/layout/Navbar';
 import Footer from "@/components/layout/Footer";
 import { AuthProvider } from '@/hooks/useAuth';
-import { CartProvider } from '@/contexts/CartProvider'; // Import CartProvider
+import { CartProvider } from '@/contexts/CartProvider';
+import { 
+  RootErrorBoundary, 
+  NavigationErrorBoundary, 
+  ContentErrorBoundary, 
+  FooterErrorBoundary 
+} from '@/components/ui/ClientErrorBoundary';
 
 export default function RootLayout({
   children,
@@ -12,13 +18,25 @@ export default function RootLayout({
   return (
     <html lang="vi">
       <body>
-        <AuthProvider>
-          <CartProvider>
-            <Navbar />
-            {children}
-            <Footer />
-          </CartProvider>
-        </AuthProvider>
+        <RootErrorBoundary>
+          <AuthProvider>
+            <CartProvider>
+              <NavigationErrorBoundary>
+                <Navbar />
+              </NavigationErrorBoundary>
+              
+              <main>
+                <ContentErrorBoundary>
+                  {children}
+                </ContentErrorBoundary>
+              </main>
+              
+              <FooterErrorBoundary>
+                <Footer />
+              </FooterErrorBoundary>
+            </CartProvider>
+          </AuthProvider>
+        </RootErrorBoundary>
       </body>
     </html>
   )

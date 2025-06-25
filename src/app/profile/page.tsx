@@ -165,6 +165,8 @@ export default function ProfilePage() {
 
             const { data, error } = await query;
 
+            console.log("data", data);
+
 
             if (error) throw error;
 

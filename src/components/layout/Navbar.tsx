@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
-import { useCart } from '@/contexts/CartProvider'; // Thay đổi import
+import { useCart } from '@/contexts/CartProvider';
 import { Search, ShoppingCart, User, Menu, X, ChevronDown, Phone, MapPin, Info } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -194,7 +194,7 @@ export default function Navbar() {
                                                 categories.map((category) => (
                                                     <Link
                                                         key={category.id}
-                                                        href={`/category/${category.slug}`}
+                                                        href={`/products?category=${category.slug}`}
                                                         className="block px-4 py-2.5 text-gray-700 hover:bg-orange-50 hover:text-orange-600 transition-all duration-200 text-sm"
                                                         onClick={() => closeMenu(MenuType.CATEGORY)}
                                                     >
@@ -275,19 +275,23 @@ export default function Navbar() {
                                                         Thông tin cá nhân
                                                     </Link>
                                                     <Link
-                                                        href="/profile/orders"
+                                                        href="/profile"
                                                         className="block px-4 py-2.5 text-gray-700 hover:bg-orange-50 hover:text-orange-600 transition-all duration-200 text-sm"
                                                         onClick={() => closeMenu(MenuType.ACCOUNT)}
                                                     >
                                                         Đơn hàng của tôi
                                                     </Link>
-                                                    <Link
-                                                        href="/admin"
-                                                        className="block px-4 py-2.5 text-gray-700 hover:bg-orange-50 hover:text-orange-600 transition-all duration-200 text-sm"
-                                                        onClick={() => closeMenu(MenuType.ACCOUNT)}
-                                                    >
-                                                        Quản trị
-                                                    </Link>
+                                                    {
+                                                        user?.role === "admin" ?
+                                                            <Link
+                                                                href="/admin"
+                                                                className="block px-4 py-2.5 text-gray-700 hover:bg-orange-50 hover:text-orange-600 transition-all duration-200 text-sm"
+                                                                onClick={() => closeMenu(MenuType.ACCOUNT)}
+                                                            >
+                                                                Quản trị
+                                                            </Link>
+                                                            : null
+                                                    }
                                                     <div className="border-t border-orange-100 mt-2 pt-2">
                                                         <button
                                                             onClick={() => {
@@ -400,7 +404,7 @@ export default function Navbar() {
                                             categories.map((category) => (
                                                 <Link
                                                     key={category.id}
-                                                    href={`/category/${category.slug}`}
+                                                    href={`/products?category=${category.slug}`}
                                                     className="block text-gray-600 hover:text-orange-600 py-2 text-sm"
                                                     onClick={closeAllMenus}
                                                 >
@@ -450,7 +454,7 @@ export default function Navbar() {
                                         Thông tin cá nhân
                                     </Link>
                                     <Link
-                                        href="/profile/orders"
+                                        href="/profile"
                                         className="block py-3 text-gray-700 hover:text-orange-600"
                                         onClick={closeAllMenus}
                                     >
@@ -468,13 +472,17 @@ export default function Navbar() {
                                 </>
                             )}
 
-                            <Link
-                                href="/admin"
-                                className="block py-3 text-gray-700 hover:text-orange-600 font-medium border-t border-orange-100"
-                                onClick={closeAllMenus}
-                            >
-                                Quản trị
-                            </Link>
+                            {
+                                user?.role === "admin" ?
+                                    <Link
+                                        href="/admin"
+                                        className="block py-3 text-gray-700 hover:text-orange-600 font-medium border-t border-orange-100"
+                                        onClick={closeAllMenus}
+                                    >
+                                        Quản trị
+                                    </Link>
+                                    : null
+                            }
                         </div>
                     </div>
                 )}

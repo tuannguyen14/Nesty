@@ -1,8 +1,8 @@
-// Fixed Checkout Page - Correct Database Schema
+// Fixed Checkout Page - Better Loading & Navigation Handling
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { useSupabaseCart } from '@/hooks/useSupabaseCart';
+import { useCart } from '@/contexts/CartProvider';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
@@ -42,7 +42,6 @@ import vietnamProvinces from '@/data/provinces/VietnamProvinces.json';
 import { ShippingInfo } from '@/types/shippingInfo';
 import { PaymentMethod } from '@/types/paymentMethod';
 
-
 const paymentMethods: PaymentMethod[] = [
   {
     id: 'cod',
@@ -51,35 +50,35 @@ const paymentMethods: PaymentMethod[] = [
     icon: Truck,
     isPopular: true
   },
-  {
-    id: 'bank',
-    name: 'Chuyển khoản ngân hàng',
-    description: 'Chuyển khoản qua tài khoản ngân hàng',
-    icon: Building
-  },
-  {
-    id: 'card',
-    name: 'Thẻ tín dụng/Ghi nợ',
-    description: 'Visa, Mastercard, JCB',
-    icon: CreditCard
-  },
-  {
-    id: 'ewallet',
-    name: 'Ví điện tử',
-    description: 'MoMo, ZaloPay, VNPay',
-    icon: Wallet
-  },
-  {
-    id: 'qr',
-    name: 'QR Code',
-    description: 'Quét mã QR để thanh toán',
-    icon: QrCode
-  }
+  // {
+  //   id: 'bank',
+  //   name: 'Chuyển khoản ngân hàng',
+  //   description: 'Chuyển khoản qua tài khoản ngân hàng',
+  //   icon: Building
+  // },
+  // {
+  //   id: 'card',
+  //   name: 'Thẻ tín dụng/Ghi nợ',
+  //   description: 'Visa, Mastercard, JCB',
+  //   icon: CreditCard
+  // },
+  // {
+  //   id: 'ewallet',
+  //   name: 'Ví điện tử',
+  //   description: 'MoMo, ZaloPay, VNPay',
+  //   icon: Wallet
+  // },
+  // {
+  //   id: 'qr',
+  //   name: 'QR Code',
+  //   description: 'Quét mã QR để thanh toán',
+  //   icon: QrCode
+  // }
 ];
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { items, subtotal, clearCart, loading: cartLoading } = useSupabaseCart();
+  const { items, subtotal, clearCart, loading: cartLoading } = useCart();
   const { user, loading: userLoading } = useAuth();
 
   const [loading, setLoading] = useState(false);
@@ -90,6 +89,9 @@ export default function CheckoutPage() {
   const [discount, setDiscount] = useState(0);
   const [selectedVoucherId, setSelectedVoucherId] = useState<number | null>(null);
 
+  // 🔥 ADD: Navigation ready state
+  const [navigationReady, setNavigationReady] = useState(false);
+
   const [shippingInfo, setShippingInfo] = useState<ShippingInfo>({
     fullName: '',
     phone: '',
@@ -98,7 +100,6 @@ export default function CheckoutPage() {
     ward: '',
     district: '',
     city: '',
-    // note: ''
   });
 
   const [errors, setErrors] = useState<Partial<ShippingInfo>>({});
@@ -116,13 +117,31 @@ export default function CheckoutPage() {
     return selectedDistrict?.wards || [];
   }, [shippingInfo.district, availableDistricts]);
 
-  // Redirect if cart is empty
+  // 🔥 IMPROVED: Navigation ready check
   useEffect(() => {
-    // Chỉ redirect khi cart đã load xong và thực sự rỗng
-    if (!userLoading && !cartLoading && items.length === 0) {
+    const timer = setTimeout(() => {
+      setNavigationReady(true);
+    }, 100); // Small delay to ensure proper initialization
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  // 🔥 IMPROVED: Redirect logic with better timing
+  useEffect(() => {
+    console.log('🔄 Checkout navigation effect:', {
+      navigationReady,
+      userLoading,
+      cartLoading,
+      itemsLength: items.length,
+      hasItems: items.length > 0
+    });
+
+    // Only redirect after everything is ready and we're sure cart is empty
+    if (navigationReady && !userLoading && !cartLoading && items.length === 0) {
+      console.log('🔴 Redirecting to cart - empty items');
       router.push('/cart');
     }
-  }, [items.length, cartLoading, router, userLoading]);
+  }, [navigationReady, items.length, cartLoading, userLoading, router]);
 
   // Auto-fill user info if logged in
   useEffect(() => {
@@ -156,13 +175,14 @@ export default function CheckoutPage() {
     }
   }, [shippingInfo.district]);
 
-  if (cartLoading) {
+  // 🔥 SHOW LOADING UNTIL EVERYTHING IS READY
+  if (!navigationReady || userLoading || cartLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-orange-50/30 via-white to-orange-50/30 flex items-center justify-center">
         <Card className="border-0 shadow-xl bg-white rounded-3xl overflow-hidden">
           <CardContent className="text-center py-20">
             <Loader2 className="w-16 h-16 text-orange-500 mx-auto mb-4 animate-spin" />
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">Đang tải giỏ hàng...</h2>
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">Đang tải...</h2>
             <p className="text-gray-600">Vui lòng đợi trong giây lát.</p>
           </CardContent>
         </Card>
@@ -170,7 +190,8 @@ export default function CheckoutPage() {
     );
   }
 
-  if (!cartLoading && items.length === 0) {
+  // 🔥 SHOW EMPTY CART ONLY AFTER LOADING IS COMPLETE
+  if (!userLoading && !cartLoading && items.length === 0) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-orange-50/30 via-white to-orange-50/30 flex items-center justify-center">
         <Card className="border-0 shadow-xl bg-white rounded-3xl overflow-hidden">
@@ -292,7 +313,7 @@ export default function CheckoutPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  // FIXED: Handle order submission với database schema chính xác
+  // Handle order submission với database schema chính xác
   const handleSubmitOrder = async () => {
     if (!validateForm()) {
       alert('Vui lòng điền đầy đủ thông tin giao hàng');
@@ -307,18 +328,18 @@ export default function CheckoutPage() {
     setLoading(true);
 
     try {
-      // ✅ Tạo order theo đúng schema
+      // Tạo order theo đúng schema
       const orderData = {
         user_id: user?.id || null,
         status: 'pending',
         total_amount: total,
-        voucher_id: selectedVoucherId, // ID từ vouchers table
+        voucher_id: selectedVoucherId,
         voucher_discount: discount,
         shipping_name: shippingInfo.fullName,
         shipping_address: `${shippingInfo.address}, ${shippingInfo.ward}, ${shippingInfo.district}, ${shippingInfo.city}`,
         shipping_phone: shippingInfo.phone,
-        shipping_code: null, // Sẽ được update sau khi có thông tin vận chuyển
-        shipping_provider: null, // Sẽ được update sau
+        shipping_code: null,
+        shipping_provider: null,
       };
 
       const { data: order, error: orderError } = await supabase
@@ -332,7 +353,7 @@ export default function CheckoutPage() {
         throw orderError;
       }
 
-      // ✅ Tạo order items theo đúng schema
+      // Tạo order items theo đúng schema
       const orderItems = items.map(item => ({
         order_id: order.id,
         product_variant_id: item.product_variant_id,
@@ -351,7 +372,7 @@ export default function CheckoutPage() {
         throw itemsError;
       }
 
-      // ✅ Cập nhật voucher usage nếu có
+      // Cập nhật voucher usage nếu có
       if (selectedVoucherId && user) {
         const { error: usageError } = await supabase
           .from('voucher_usages')
@@ -403,25 +424,6 @@ export default function CheckoutPage() {
       item.product_variants.products.discount_price ||
       item.product_variants.products.price;
   };
-
-  if (items.length === 0) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-orange-50/30 via-white to-orange-50/30 flex items-center justify-center">
-        <Card className="border-0 shadow-xl bg-white rounded-3xl overflow-hidden">
-          <CardContent className="text-center py-20">
-            <ShoppingBag className="w-16 h-16 text-orange-400 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">Giỏ hàng trống</h2>
-            <p className="text-gray-600 mb-8">Vui lòng thêm sản phẩm vào giỏ hàng trước khi thanh toán.</p>
-            <Link href="/products">
-              <Button className="bg-gradient-orange hover:bg-gradient-orange-dark text-white px-8 py-4 rounded-2xl">
-                Tiếp tục mua sắm
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-orange-50/30 via-white to-orange-50/30">
@@ -603,8 +605,6 @@ export default function CheckoutPage() {
                   </Label>
                   <Textarea
                     id="note"
-                    // value={shippingInfo.note}
-                    // onChange={(e) => handleInputChange('note', e.target.value)}
                     placeholder="Ghi chú về đơn hàng, ví dụ: giao hàng giờ hành chính..."
                     className="rounded-xl border-orange-200 focus:border-orange-500 min-h-[80px]"
                   />
@@ -703,7 +703,7 @@ export default function CheckoutPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* Cart Items - ✅ Fixed structure */}
+                {/* Cart Items */}
                 <div className="space-y-3 max-h-64 overflow-y-auto">
                   {items.map((item) => (
                     <div key={item.id} className="flex gap-3 p-3 bg-gray-50 rounded-xl">

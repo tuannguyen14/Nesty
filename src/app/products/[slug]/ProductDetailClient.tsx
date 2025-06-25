@@ -1,12 +1,11 @@
 'use client';
 
-
 import dayjs from "dayjs";
-
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from "next/navigation";
+import dynamic from 'next/dynamic';
 import { ProductWithRelations } from "@/types/product";
-import { useSupabaseCart } from "@/hooks/useSupabaseCart";
+import { useCart } from '@/contexts/CartProvider';
 import { useAuth } from "@/hooks/useAuth";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
@@ -36,277 +35,307 @@ import {
     LogIn
 } from "lucide-react";
 
-import Lightbox from "yet-another-react-lightbox";
-import "yet-another-react-lightbox/styles.css";
-
 import { getColorStyle } from '@/utils/colorUtils';
 import { ProductVariant } from '@/types/product';
 
+// Lazy load Lightbox to reduce initial bundle size
+const Lightbox = dynamic(() => import("yet-another-react-lightbox"), {
+    ssr: false,
+    loading: () => <div>Loading...</div>
+});
 
 interface ProductDetailClientProps {
     product: ProductWithRelations;
 }
 
+// Constants to avoid magic numbers
+const CONSTANTS = {
+    MIN_QUANTITY: 1,
+    MAX_STOCK_WARNING: 5,
+    CART_SUCCESS_TIMEOUT: 2000,
+    DISCOUNT_ANIMATION_DELAY: 500,
+    THUMBNAIL_GRID_COLS: 4
+} as const;
+
+// Custom hooks for better separation of concerns
+const useProductVariants = (product: ProductWithRelations) => {
+    return useMemo(() => {
+        const variants = product.product_variants || [];
+        const totalStock = variants.reduce((sum, v) => sum + v.stock, 0);
+        const availableColors = [...new Set(
+            variants
+                .map(v => v.color)
+                .filter((color): color is string => color !== undefined && color !== null)
+        )];
+        const availableSizes = [...new Set(
+            variants
+                .map(v => v.size)
+                .filter((size): size is string => size !== undefined && size !== null)
+        )];
+
+        return {
+            variants,
+            totalStock,
+            availableColors,
+            availableSizes
+        };
+    }, [product.product_variants]);
+};
+
+const useProductImages = (product: ProductWithRelations) => {
+    return useMemo(() => {
+        const sortedImages = (product.product_images ?? []).sort((a, b) => a.sort_order - b.sort_order);
+        const mainImage = sortedImages[0]?.image_url || "/api/placeholder/400/400";
+        const otherImages = sortedImages.slice(1);
+        
+        const lightboxSlides = sortedImages.length > 0
+            ? sortedImages.map(img => ({
+                src: img.image_url,
+                alt: product.name
+            }))
+            : [{ src: mainImage, alt: product.name }];
+
+        return {
+            sortedImages,
+            mainImage,
+            otherImages,
+            lightboxSlides
+        };
+    }, [product.product_images, product.name]);
+};
+
+const useProductDiscount = (product: ProductWithRelations) => {
+    return useMemo(() => {
+        const now = dayjs();
+        const isDiscount =
+            product.discount_price &&
+            product.discount_start &&
+            product.discount_end &&
+            now.isAfter(dayjs(product.discount_start)) &&
+            now.isBefore(dayjs(product.discount_end));
+
+        const discountPercent = isDiscount && product.discount_price
+            ? Math.round(((product.price - product.discount_price) / product.price) * 100)
+            : 0;
+
+        const savedAmount = isDiscount && product.discount_price
+            ? product.price - product.discount_price
+            : 0;
+
+        return {
+            isDiscount,
+            discountPercent,
+            savedAmount,
+            now
+        };
+    }, [product.discount_price, product.discount_start, product.discount_end, product.price]);
+};
+
 export default function ProductDetailClient({ product }: ProductDetailClientProps) {
+    // State management
     const [selectedColor, setSelectedColor] = useState<string>('');
     const [selectedSize, setSelectedSize] = useState<string>('');
     const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
-    const [quantity, setQuantity] = useState(1);
+    const [quantity, setQuantity] = useState<number>(CONSTANTS.MIN_QUANTITY);
     const [addedToCart, setAddedToCart] = useState(false);
     const [isInWishlist, setIsInWishlist] = useState(false);
     const [lightboxOpen, setLightboxOpen] = useState(false);
     const [lightboxIndex, setLightboxIndex] = useState(0);
 
-    const [isLoading, setIsLoading] = useState(false)
-
+    // Hooks
     const router = useRouter();
     const { user } = useAuth();
-    const {
-        addToCart,
-        isInCart,
-        loading: cartLoading,
-        error: cartError
-    } = useSupabaseCart();
+    const { addToCart, isInCart, refreshCart, error: cartError } = useCart();
+    
+    // Custom hooks
+    const { variants, totalStock, availableColors, availableSizes } = useProductVariants(product);
+    const { sortedImages, mainImage, otherImages, lightboxSlides } = useProductImages(product);
+    const { isDiscount, discountPercent, savedAmount, now } = useProductDiscount(product);
 
-    // Logic tính toán thông tin sản phẩm
-    const variants = product.product_variants || [];
-    const totalStock = variants.reduce((sum, v) => sum + v.stock, 0);
-    const availableColors = [...new Set(
-        variants
-            .map(v => v.color)
-            .filter((color): color is string => color !== undefined && color !== null)
-    )];
-    const availableSizes = [...new Set(
-        variants
-            .map(v => v.size)
-            .filter((size): size is string => size !== undefined && size !== null)
-    )];
-    const now = dayjs();
-    const isDiscount =
-        product.discount_price &&
-        product.discount_start &&
-        product.discount_end &&
-        now.isAfter(dayjs(product.discount_start)) &&
-        now.isBefore(dayjs(product.discount_end));
+    // Memoized functions for variant availability checks
+    const variantHelpers = useMemo(() => ({
+        isSizeAvailable: (size: string) => {
+            if (!selectedColor) return variants.some(v => v.size === size && v.stock > 0);
+            const variant = variants.find(v => v.color === selectedColor && v.size === size);
+            return variant ? variant.stock > 0 : false;
+        },
 
-    const sortedImages = (product.product_images ?? []).sort((a, b) => a.sort_order - b.sort_order);
-    const mainImage = sortedImages[0]?.image_url || "/api/placeholder/400/400";
-    const otherImages = sortedImages.slice(1);
+        isColorAvailable: (color: string) => {
+            if (!selectedSize) return variants.some(v => v.color === color && v.stock > 0);
+            const variant = variants.find(v => v.color === color && v.size === selectedSize);
+            return variant ? variant.stock > 0 : false;
+        },
 
-    const lightboxSlides = sortedImages.length > 0
-        ? sortedImages.map(img => ({
-            src: img.image_url,
-            alt: product.name
-        }))
-        : [{ src: mainImage, alt: product.name }];
+        getSizeStock: (size: string) => {
+            if (!selectedColor) return 0;
+            const variant = variants.find(v => v.color === selectedColor && v.size === size);
+            return variant ? variant.stock : 0;
+        },
 
+        getColorStock: (color: string) => {
+            if (!selectedSize) return 0;
+            const variant = variants.find(v => v.color === color && v.size === selectedSize);
+            return variant ? variant.stock : 0;
+        }
+    }), [variants, selectedColor, selectedSize]);
 
+    // Memoized computed values
+    const computedValues = useMemo(() => ({
+        getCurrentPrice: () => {
+            try {
+                if (selectedVariant?.price_override) {
+                    return selectedVariant.price_override;
+                }
+                return isDiscount && product.discount_price ? product.discount_price : product.price;
+            } catch (error) {
+                console.error('Error calculating price:', error);
+                return product.price;
+            }
+        },
 
-    const discountPercent = isDiscount && product.discount_price
-        ? Math.round(((product.price - product.discount_price) / product.price) * 100)
-        : 0;
+        getVariantStock: () => {
+            return selectedVariant ? selectedVariant.stock : totalStock;
+        },
 
-    const savedAmount = isDiscount && product.discount_price
-        ? product.price - product.discount_price
-        : 0;
+        isOutOfStock: () => {
+            if (selectedVariant) {
+                return selectedVariant.stock <= 0;
+            }
+            return variants.every(v => v.stock <= 0);
+        },
+
+        isCurrentInCart: () => {
+            if (!selectedVariant) return false;
+            return isInCart(selectedVariant.id);
+        },
+
+        canAddToCart: () => {
+            if (!user) return false;
+            if (availableColors.length > 0 && !selectedColor) return false;
+            if (availableSizes.length > 0 && !selectedSize) return false;
+            if (variants.length > 0 && !selectedVariant) return false;
+            return !computedValues.isOutOfStock();
+        }
+    }), [selectedVariant, isDiscount, product.discount_price, product.price, totalStock, variants, isInCart, user, availableColors.length, selectedColor, availableSizes.length, selectedSize]);
 
     // Update selected variant when color/size changes
     useEffect(() => {
         if (selectedColor && selectedSize) {
             const variant = variants.find(v => v.color === selectedColor && v.size === selectedSize);
-            setSelectedVariant(variant || null); // Ensure null instead of undefined
-            // Reset quantity nếu variant mới có ít stock hơn
+            setSelectedVariant(variant || null);
+            
+            // Reset quantity if new variant has less stock
             if (variant && quantity > variant.stock) {
-                setQuantity(Math.max(1, variant.stock));
+                setQuantity(Math.max(CONSTANTS.MIN_QUANTITY, variant.stock));
             }
         } else {
             setSelectedVariant(null);
         }
     }, [selectedColor, selectedSize, variants, quantity]);
 
-    // Get available sizes for selected color
-    const getAvailableSizesForColor = (color: string) => {
-        return variants
-            .filter(v => v.color === color)
-            .map(v => ({ size: v.size, stock: v.stock }))
-            .filter(item => item.size); // Filter out undefined sizes
-    };
-
-    const getAvailableColorsForSize = (size: string) => {
-        return variants
-            .filter(v => v.size === size)
-            .map(v => ({ color: v.color, stock: v.stock }))
-            .filter(item => item.color); // Filter out undefined colors
-    };
-
-    // Check if a size is available for current selected color
-    const isSizeAvailable = (size: string) => {
-        if (!selectedColor) return variants.some(v => v.size === size && v.stock > 0);
-        const variant = variants.find(v => v.color === selectedColor && v.size === size);
-        return variant ? variant.stock > 0 : false;
-    };
-
-    const isColorAvailable = (color: string) => {
-        if (!selectedSize) return variants.some(v => v.color === color && v.stock > 0);
-        const variant = variants.find(v => v.color === color && v.size === selectedSize);
-        return variant ? variant.stock > 0 : false;
-    };
-
-    // Get stock for a specific size when color is selected
-    const getSizeStock = (size: string) => {
-        if (!selectedColor) return 0;
-        const variant = variants.find(v => v.color === selectedColor && v.size === size);
-        return variant ? variant.stock : 0;
-    };
-
-
-    // Get stock for a specific color when size is selected
-    const getColorStock = (color: string) => {
-        if (!selectedSize) return 0;
-        const variant = variants.find(v => v.color === color && v.size === selectedSize);
-        return variant ? variant.stock : 0;
-    };
-
-    // Get current price based on variant
-    const getCurrentPrice = () => {
-       try {
-        if (selectedVariant?.price_override) {
-            return selectedVariant.price_override;
-        }
-        return isDiscount && product.discount_price ? product.discount_price : product.price;
-    } catch (error) {
-        console.error('Error calculating price:', error);
-        return product.price;
-    }
-    };
-
-    // Get stock for selected variant
-    const getVariantStock = () => {
-        if (selectedVariant) {
-            return selectedVariant.stock;
-        }
-        // Nếu chưa chọn variant, return tổng stock để hiển thị thông tin chung
-        return totalStock;
-    };
-
-    // Check if product is out of stock
-    const isOutOfStock = () => {
-        // Nếu đã chọn đầy đủ variant
-        if (selectedVariant) {
-            return selectedVariant.stock <= 0;
-        }
-        // Nếu chưa chọn đầy đủ, kiểm tra có variant nào có stock > 0 không
-        return variants.every(v => v.stock <= 0);
-    };
-
-    const handleColorSelect = (color: string) => {
-        // Nếu click vào màu đã chọn thì bỏ chọn
+    // Optimized event handlers with useCallback
+    const handleColorSelect = useCallback((color: string) => {
         if (selectedColor === color) {
             setSelectedColor('');
             return;
         }
 
         setSelectedColor(color);
-        // Reset size if current size is not available for new color
-        if (selectedSize && !isSizeAvailable(selectedSize)) {
+        if (selectedSize && !variantHelpers.isSizeAvailable(selectedSize)) {
             setSelectedSize('');
         }
-    };
+    }, [selectedColor, selectedSize, variantHelpers]);
 
-    // Handle size selection
-    const handleSizeSelect = (size: string) => {
-        // Nếu click vào size đã chọn thì bỏ chọn
+    const handleSizeSelect = useCallback((size: string) => {
         if (selectedSize === size) {
             setSelectedSize('');
             return;
         }
 
         setSelectedSize(size);
-        // Reset color if current color is not available for new size
-        if (selectedColor && !isColorAvailable(selectedColor)) {
+        if (selectedColor && !variantHelpers.isColorAvailable(selectedColor)) {
             setSelectedColor('');
         }
-    };
+    }, [selectedSize, selectedColor, variantHelpers]);
 
-    // Handle add to cart
-    const handleAddToCart = async () => {
-        // Kiểm tra đăng nhập
+    const handleQuantityChange = useCallback((delta: number) => {
+        const newQuantity = quantity + delta;
+        const maxStock = computedValues.getVariantStock();
+        setQuantity(Math.max(CONSTANTS.MIN_QUANTITY, Math.min(maxStock, newQuantity)));
+    }, [quantity, computedValues]);
+
+    const handleAddToCart = useCallback(async () => {
         if (!user) {
             router.push('/login');
-            return;
+            return false;
         }
 
-        // Validate selection - chỉ check khi có options
-        if (availableColors.length > 0 && !selectedColor) {
-            alert('Vui lòng chọn màu sắc');
-            return;
-        }
-        if (availableSizes.length > 0 && !selectedSize) {
-            alert('Vui lòng chọn kích thước');
-            return;
+        // Validation
+        if (!computedValues.canAddToCart()) {
+            if (availableColors.length > 0 && !selectedColor) {
+                alert('Vui lòng chọn màu sắc');
+                return false;
+            }
+            if (availableSizes.length > 0 && !selectedSize) {
+                alert('Vui lòng chọn kích thước');
+                return false;
+            }
+            if (variants.length > 0 && !selectedVariant) {
+                alert('Vui lòng chọn phiên bản sản phẩm');
+                return false;
+            }
+            return false;
         }
 
-        // Nếu có variants nhưng chưa chọn đủ thông tin
-        if (variants.length > 0 && !selectedVariant) {
+        if (!selectedVariant) {
             alert('Vui lòng chọn phiên bản sản phẩm');
-            return;
+            return false;
         }
 
-        // Nếu không có variants nào, tạo variant mặc định
-        let variantToAdd = selectedVariant;
-        if (!variantToAdd && variants.length === 0) {
-            // Trường hợp không có variants, cần tạo logic khác
-            alert('Sản phẩm này không có phiên bản để thêm vào giỏ');
-            return;
+        // Stock validation
+        if (selectedVariant.stock < quantity) {
+            alert(`Chỉ còn ${selectedVariant.stock} sản phẩm trong kho`);
+            return false;
         }
 
-        if (!variantToAdd) {
-            alert('Vui lòng chọn phiên bản sản phẩm');
-            return;
-        }
-
-        // Kiểm tra tồn kho
-        if (variantToAdd.stock < quantity) {
-            alert(`Chỉ còn ${variantToAdd.stock} sản phẩm trong kho`);
-            return;
-        }
-
-        if (variantToAdd.stock <= 0) {
+        if (selectedVariant.stock <= 0) {
             alert('Sản phẩm này đã hết hàng');
-            return;
+            return false;
         }
 
         try {
-            const success = await addToCart(variantToAdd.id, quantity);
+            const success = await addToCart(selectedVariant.id, quantity);
 
             if (success) {
                 setAddedToCart(true);
-                // Reset after 2 seconds
+                await refreshCart();
+                
+                // Reset success state after timeout
                 setTimeout(() => {
                     setAddedToCart(false);
-                }, 2000);
+                }, CONSTANTS.CART_SUCCESS_TIMEOUT);
             }
             return success;
         } catch (error) {
             console.error('Error adding to cart:', error);
             return false;
         }
-    };
+    }, [user, router, computedValues, availableColors.length, selectedColor, availableSizes.length, selectedSize, variants.length, selectedVariant, quantity, addToCart, refreshCart]);
 
-    // Handle buy now
-    const handleBuyNow = async () => {
+    const handleBuyNow = useCallback(async () => {
         const success = await handleAddToCart();
         if (success) {
+            await refreshCart();
             router.push('/checkout');
         }
-    };
+    }, [handleAddToCart, refreshCart, router]);
 
-    // Check if current selection is in cart
-    const isCurrentInCart = () => {
-        if (!selectedVariant) return false;
-        return isInCart(selectedVariant.id);
-    };
+    const handleImageClick = useCallback((index: number) => {
+        setLightboxIndex(index);
+        setLightboxOpen(true);
+    }, []);
 
+    // Component render starts here...
     return (
         <div className="min-h-screen bg-gradient-to-b from-orange-50/30 via-white to-orange-50/30">
             {/* Error Alert */}
@@ -325,9 +354,13 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
             <div className="bg-white shadow-sm">
                 <div className="max-w-7xl mx-auto px-4 py-4">
                     <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <span className="hover:text-orange-600 cursor-pointer" onClick={() => router.push('/')}>Trang chủ</span>
+                        <span className="hover:text-orange-600 cursor-pointer" onClick={() => router.push('/')}>
+                            Trang chủ
+                        </span>
                         <span>/</span>
-                        <span className="hover:text-orange-600 cursor-pointer" onClick={() => router.push('/products')}>Sản phẩm</span>
+                        <span className="hover:text-orange-600 cursor-pointer" onClick={() => router.push('/products')}>
+                            Sản phẩm
+                        </span>
                         <span>/</span>
                         <span className="text-orange-600 font-medium">{product.name}</span>
                     </div>
@@ -339,10 +372,8 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                     {/* Gallery Section */}
                     <div className="space-y-6">
                         {/* Main Image */}
-                        <Card className="overflow-hidden rounded-3xl shadow-xl border-0 bg-white cursor-pointer" onClick={() => {
-                            setLightboxIndex(0);
-                            setLightboxOpen(true);
-                        }}>
+                        <Card className="overflow-hidden rounded-3xl shadow-xl border-0 bg-white cursor-pointer" 
+                              onClick={() => handleImageClick(0)}>
                             <div className="relative aspect-square bg-gradient-to-br from-orange-50 to-amber-50">
                                 <Image
                                     src={mainImage}
@@ -350,6 +381,7 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                                     fill
                                     className="object-cover transition-transform duration-700 hover:scale-105"
                                     sizes="(max-width: 768px) 100vw, 50vw"
+                                    priority
                                 />
 
                                 {/* Floating badges */}
@@ -360,7 +392,7 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                                             GIẢM {discountPercent}%
                                         </Badge>
                                     )}
-                                    {selectedVariant && selectedVariant.stock <= 5 && selectedVariant.stock > 0 && (
+                                    {selectedVariant && selectedVariant.stock <= CONSTANTS.MAX_STOCK_WARNING && selectedVariant.stock > 0 && (
                                         <Badge className="bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg px-3 py-1.5 rounded-full text-xs">
                                             <TrendingUp className="w-3 h-3 mr-1" />
                                             Chỉ còn {selectedVariant.stock} sản phẩm
@@ -383,13 +415,22 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                                     <Button
                                         size="icon"
                                         variant="secondary"
-                                        className={`rounded-full bg-white/90 backdrop-blur-sm hover:bg-white shadow-lg transition-all ${isInWishlist ? 'text-red-500' : 'hover:text-orange-600'
-                                            }`}
-                                        onClick={() => setIsInWishlist(!isInWishlist)}
+                                        className={`rounded-full bg-white/90 backdrop-blur-sm hover:bg-white shadow-lg transition-all ${
+                                            isInWishlist ? 'text-red-500' : 'hover:text-orange-600'
+                                        }`}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setIsInWishlist(!isInWishlist);
+                                        }}
                                     >
                                         <Heart className={`w-4 h-4 ${isInWishlist ? 'fill-current' : ''}`} />
                                     </Button>
-                                    <Button size="icon" variant="secondary" className="rounded-full bg-white/90 backdrop-blur-sm hover:bg-white shadow-lg hover:text-orange-600 transition-all">
+                                    <Button 
+                                        size="icon" 
+                                        variant="secondary" 
+                                        className="rounded-full bg-white/90 backdrop-blur-sm hover:bg-white shadow-lg hover:text-orange-600 transition-all"
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
                                         <Share2 className="w-4 h-4" />
                                     </Button>
                                 </div>
@@ -398,15 +439,12 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
 
                         {/* Thumbnail Gallery */}
                         {otherImages.length > 0 && (
-                            <div className="grid grid-cols-4 gap-3">
+                            <div className={`grid grid-cols-${CONSTANTS.THUMBNAIL_GRID_COLS} gap-3`}>
                                 {otherImages.map((img, index) => (
                                     <Card
                                         key={img.id}
                                         className="overflow-hidden rounded-2xl border-0 shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer hover:-translate-y-1"
-                                        onClick={() => {
-                                            setLightboxIndex(index + 1); // +1 vì mainImage là index 0
-                                            setLightboxOpen(true);
-                                        }}
+                                        onClick={() => handleImageClick(index + 1)}
                                     >
                                         <div className="relative aspect-square bg-orange-50">
                                             <Image
@@ -414,6 +452,7 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                                                 alt={`${product.name} ${index + 2}`}
                                                 fill
                                                 className="object-cover hover:scale-110 transition-transform duration-300"
+                                                sizes="(max-width: 768px) 25vw, 12.5vw"
                                             />
                                         </div>
                                     </Card>
@@ -450,7 +489,7 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                                     <>
                                         <div className="flex items-center gap-4">
                                             <span className="text-4xl font-bold text-gradient-orange">
-                                                {getCurrentPrice().toLocaleString("vi-VN")}đ
+                                                {computedValues.getCurrentPrice().toLocaleString("vi-VN")}đ
                                             </span>
                                             {savedAmount > 0 && (
                                                 <Badge className="bg-gradient-to-r from-green-500 to-emerald-500 text-white px-3 py-1 rounded-full text-sm">
@@ -472,7 +511,7 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                                     </>
                                 ) : (
                                     <span className="text-4xl font-bold text-gradient-orange">
-                                        {getCurrentPrice().toLocaleString("vi-VN")}đ
+                                        {computedValues.getCurrentPrice().toLocaleString("vi-VN")}đ
                                     </span>
                                 )}
                             </div>
@@ -480,6 +519,7 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
 
                         {/* Variants Selection */}
                         <div className="space-y-6">
+                            {/* Color Selection */}
                             {availableColors.length > 0 && (
                                 <div className="space-y-3">
                                     <div className="flex items-center gap-2">
@@ -493,7 +533,7 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                                     </div>
                                     <div className="flex flex-wrap gap-3">
                                         {availableColors.map((color, idx) => {
-                                            const colorStock = getColorStock(color);
+                                            const colorStock = variantHelpers.getColorStock(color);
                                             const isAvailable = selectedSize ? colorStock > 0 : variants.some(v => v.color === color && v.stock > 0);
 
                                             return (
@@ -501,20 +541,19 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                                                     key={idx}
                                                     variant="outline"
                                                     disabled={!isAvailable}
-                                                    className={`px-4 py-2 rounded-2xl border-2 transition-all duration-200 hover:scale-105 ${selectedColor === color
-                                                        ? 'border-orange-500 bg-orange-50 text-orange-600'
-                                                        : isAvailable
+                                                    className={`px-4 py-2 rounded-2xl border-2 transition-all duration-200 hover:scale-105 ${
+                                                        selectedColor === color
+                                                            ? 'border-orange-500 bg-orange-50 text-orange-600'
+                                                            : isAvailable
                                                             ? 'hover:border-orange-500 hover:bg-orange-50'
                                                             : 'opacity-50 cursor-not-allowed border-gray-200 text-gray-400'
-                                                        }`}
+                                                    }`}
                                                     onClick={() => handleColorSelect(color)}
                                                 >
                                                     <div className="flex items-center gap-2">
                                                         <div
                                                             className="w-4 h-4 rounded-full border border-gray-300"
-                                                            style={{
-                                                                backgroundColor: getColorStyle(color)
-                                                            }}
+                                                            style={{ backgroundColor: getColorStyle(color) }}
                                                         />
                                                         {color}
                                                         {selectedColor === color && (
@@ -531,6 +570,7 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                                 </div>
                             )}
 
+                            {/* Size Selection */}
                             {availableSizes.length > 0 && (
                                 <div className="space-y-3">
                                     <div className="flex items-center gap-2">
@@ -544,7 +584,7 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                                     </div>
                                     <div className="grid grid-cols-4 gap-3">
                                         {availableSizes.map((size, idx) => {
-                                            const sizeStock = getSizeStock(size);
+                                            const sizeStock = variantHelpers.getSizeStock(size);
                                             const isAvailable = selectedColor ? sizeStock > 0 : variants.some(v => v.size === size && v.stock > 0);
 
                                             return (
@@ -552,12 +592,13 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                                                     key={idx}
                                                     variant="outline"
                                                     disabled={!isAvailable}
-                                                    className={`h-12 rounded-2xl border-2 transition-all duration-200 hover:scale-105 font-medium relative ${selectedSize === size
-                                                        ? 'border-orange-500 bg-orange-50 text-orange-600'
-                                                        : isAvailable
+                                                    className={`h-12 rounded-2xl border-2 transition-all duration-200 hover:scale-105 font-medium relative ${
+                                                        selectedSize === size
+                                                            ? 'border-orange-500 bg-orange-50 text-orange-600'
+                                                            : isAvailable
                                                             ? 'hover:border-orange-500 hover:bg-orange-50'
                                                             : 'opacity-50 cursor-not-allowed border-gray-200 text-gray-400'
-                                                        }`}
+                                                    }`}
                                                     onClick={() => handleSizeSelect(size)}
                                                 >
                                                     <div className="flex flex-col items-center">
@@ -586,8 +627,8 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                                         variant="outline"
                                         size="icon"
                                         className="h-10 w-10 rounded-xl border-orange-200 hover:bg-orange-50"
-                                        onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                                        disabled={quantity <= 1}
+                                        onClick={() => handleQuantityChange(-1)}
+                                        disabled={quantity <= CONSTANTS.MIN_QUANTITY}
                                     >
                                         -
                                     </Button>
@@ -596,8 +637,8 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                                         variant="outline"
                                         size="icon"
                                         className="h-10 w-10 rounded-xl border-orange-200 hover:bg-orange-50"
-                                        onClick={() => setQuantity(Math.min(getVariantStock(), quantity + 1))}
-                                        disabled={quantity >= getVariantStock() || getVariantStock() <= 0}
+                                        onClick={() => handleQuantityChange(1)}
+                                        disabled={quantity >= computedValues.getVariantStock() || computedValues.getVariantStock() <= 0}
                                     >
                                         +
                                     </Button>
@@ -629,12 +670,13 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                         )}
 
                         {/* Stock Status */}
-                        <Card className={`p-4 rounded-2xl border-0 shadow-md ${isOutOfStock()
-                            ? 'bg-gradient-to-r from-red-50 to-red-100'
-                            : 'bg-gradient-to-r from-green-50 to-emerald-50'
-                            }`}>
+                        <Card className={`p-4 rounded-2xl border-0 shadow-md ${
+                            computedValues.isOutOfStock()
+                                ? 'bg-gradient-to-r from-red-50 to-red-100'
+                                : 'bg-gradient-to-r from-green-50 to-emerald-50'
+                        }`}>
                             <div className="flex items-center gap-3">
-                                <Package className={`w-5 h-5 ${isOutOfStock() ? 'text-red-600' : 'text-green-600'}`} />
+                                <Package className={`w-5 h-5 ${computedValues.isOutOfStock() ? 'text-red-600' : 'text-green-600'}`} />
                                 {selectedVariant ? (
                                     selectedVariant.stock > 0 ? (
                                         <span className="text-green-700 font-medium">
@@ -646,7 +688,7 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                                         </span>
                                     )
                                 ) : (
-                                    !isOutOfStock() ? (
+                                    !computedValues.isOutOfStock() ? (
                                         <span className="text-green-700 font-medium">
                                             Tổng {totalStock} sản phẩm - Vui lòng chọn màu sắc và kích thước
                                         </span>
@@ -663,11 +705,12 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                                 <Button
                                     size="lg"
                                     variant="outline"
-                                    className={`h-14 text-base font-semibold rounded-2xl border-2 transition-all duration-300 hover:scale-105 ${addedToCart
-                                        ? 'border-green-500 bg-green-50 text-green-600'
-                                        : 'border-orange-300 text-orange-600 hover:bg-orange-50 hover:border-orange-400'
-                                        }`}
-                                    disabled={isOutOfStock() || !user || (availableColors.length > 0 && !selectedColor) || (availableSizes.length > 0 && !selectedSize)}
+                                    className={`h-14 text-base font-semibold rounded-2xl border-2 transition-all duration-300 hover:scale-105 ${
+                                        addedToCart
+                                            ? 'border-green-500 bg-green-50 text-green-600'
+                                            : 'border-orange-300 text-orange-600 hover:bg-orange-50 hover:border-orange-400'
+                                    }`}
+                                    disabled={!computedValues.canAddToCart()}
                                     onClick={handleAddToCart}
                                 >
                                     {addedToCart ? (
@@ -678,14 +721,14 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                                     ) : (
                                         <>
                                             <ShoppingCart className="w-5 h-5 mr-2" />
-                                            {isCurrentInCart() ? 'Thêm tiếp' : 'Thêm vào giỏ'}
+                                            {computedValues.isCurrentInCart() ? 'Thêm tiếp' : 'Thêm vào giỏ'}
                                         </>
                                     )}
                                 </Button>
                                 <Button
                                     size="lg"
                                     className="h-14 text-base font-bold rounded-2xl bg-gradient-orange hover:bg-gradient-orange-dark text-white shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105"
-                                    disabled={isOutOfStock() || !user || (availableColors.length > 0 && !selectedColor) || (availableSizes.length > 0 && !selectedSize)}
+                                    disabled={!computedValues.canAddToCart()}
                                     onClick={handleBuyNow}
                                 >
                                     Mua ngay
@@ -901,19 +944,21 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
             </div>
 
             {/* Lightbox */}
-            <Lightbox
-                open={lightboxOpen}
-                close={() => setLightboxOpen(false)}
-                index={lightboxIndex}
-                slides={lightboxSlides}
-                carousel={{
-                    finite: sortedImages.length <= 1,
-                }}
-                render={{
-                    buttonPrev: sortedImages.length <= 1 ? () => null : undefined,
-                    buttonNext: sortedImages.length <= 1 ? () => null : undefined,
-                }}
-            />
+            {lightboxOpen && (
+                <Lightbox
+                    open={lightboxOpen}
+                    close={() => setLightboxOpen(false)}
+                    index={lightboxIndex}
+                    slides={lightboxSlides}
+                    carousel={{
+                        finite: sortedImages.length <= 1,
+                    }}
+                    render={{
+                        buttonPrev: sortedImages.length <= 1 ? () => null : undefined,
+                        buttonNext: sortedImages.length <= 1 ? () => null : undefined,
+                    }}
+                />
+            )}
         </div>
     );
 }
