@@ -29,6 +29,7 @@ import {
 import Lottie from "lottie-react";
 import shoppingAnimation from "@/data/animations/shopping.json";
 import { useAuth } from '@/hooks/useAuth';
+import OverlayLoading from '@/components/loading/OverlayLoading';
 
 export default function RegisterPage() {
     const router = useRouter();
@@ -597,6 +598,11 @@ export default function RegisterPage() {
                     </CardContent>
                 </Card>
             </div>
+
+            <OverlayLoading
+                isVisible={loading}
+                message="Đang xử lý yêu cầu của bạn..."
+            />
         </div>
     );
 }

@@ -7,6 +7,7 @@ import dynamic from 'next/dynamic';
 import { ProductWithRelations } from "@/types/product";
 import { useCart } from '@/contexts/CartProvider';
 import { useAuth } from "@/hooks/useAuth";
+import OverlayLoading from '@/components/loading/OverlayLoading'; // Import OverlayLoading
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -87,7 +88,7 @@ const useProductImages = (product: ProductWithRelations) => {
         const sortedImages = (product.product_images ?? []).sort((a, b) => a.sort_order - b.sort_order);
         const mainImage = sortedImages[0]?.image_url || "/api/placeholder/400/400";
         const otherImages = sortedImages.slice(1);
-        
+
         const lightboxSlides = sortedImages.length > 0
             ? sortedImages.map(img => ({
                 src: img.image_url,
@@ -142,11 +143,16 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
     const [lightboxOpen, setLightboxOpen] = useState(false);
     const [lightboxIndex, setLightboxIndex] = useState(0);
 
+    // Loading states - Thêm các state loading
+    const [isAddingToCart, setIsAddingToCart] = useState(false);
+    const [isBuyingNow, setIsBuyingNow] = useState(false);
+    const [isWishlistLoading, setIsWishlistLoading] = useState(false);
+
     // Hooks
     const router = useRouter();
     const { user } = useAuth();
     const { addToCart, isInCart, refreshCart, error: cartError } = useCart();
-    
+
     // Custom hooks
     const { variants, totalStock, availableColors, availableSizes } = useProductVariants(product);
     const { sortedImages, mainImage, otherImages, lightboxSlides } = useProductImages(product);
@@ -223,7 +229,7 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
         if (selectedColor && selectedSize) {
             const variant = variants.find(v => v.color === selectedColor && v.size === selectedSize);
             setSelectedVariant(variant || null);
-            
+
             // Reset quantity if new variant has less stock
             if (variant && quantity > variant.stock) {
                 setQuantity(Math.max(CONSTANTS.MIN_QUANTITY, variant.stock));
@@ -304,12 +310,14 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
         }
 
         try {
+            setIsAddingToCart(true); // Bắt đầu loading
+
             const success = await addToCart(selectedVariant.id, quantity);
 
             if (success) {
                 setAddedToCart(true);
                 await refreshCart();
-                
+
                 // Reset success state after timeout
                 setTimeout(() => {
                     setAddedToCart(false);
@@ -319,16 +327,39 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
         } catch (error) {
             console.error('Error adding to cart:', error);
             return false;
+        } finally {
+            setIsAddingToCart(false); // Kết thúc loading
         }
     }, [user, router, computedValues, availableColors.length, selectedColor, availableSizes.length, selectedSize, variants.length, selectedVariant, quantity, addToCart, refreshCart]);
 
     const handleBuyNow = useCallback(async () => {
-        const success = await handleAddToCart();
-        if (success) {
-            await refreshCart();
-            router.push('/checkout');
+        try {
+            setIsBuyingNow(true); // Bắt đầu loading
+            const success = await handleAddToCart();
+            if (success) {
+                await refreshCart();
+                router.push('/checkout');
+            }
+        } finally {
+            setIsBuyingNow(false); // Kết thúc loading
         }
     }, [handleAddToCart, refreshCart, router]);
+
+    const handleWishlist = useCallback(async () => {
+        if (!user) {
+            router.push('/login');
+            return;
+        }
+
+        try {
+            setIsWishlistLoading(true);
+            // Simulate API call
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            setIsInWishlist(!isInWishlist);
+        } finally {
+            setIsWishlistLoading(false);
+        }
+    }, [user, router, isInWishlist]);
 
     const handleImageClick = useCallback((index: number) => {
         setLightboxIndex(index);
@@ -338,6 +369,23 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
     // Component render starts here...
     return (
         <div className="min-h-screen bg-gradient-to-b from-orange-50/30 via-white to-orange-50/30">
+            {/* OverlayLoading Components */}
+            <OverlayLoading
+                isVisible={isAddingToCart}
+                message="Đang thêm vào giỏ hàng..."
+                overlayOpacity={0.8}
+            />
+            <OverlayLoading
+                isVisible={isBuyingNow}
+                message="Đang xử lý đơn hàng..."
+                overlayOpacity={0.8}
+            />
+            <OverlayLoading
+                isVisible={isWishlistLoading}
+                message="Đang cập nhật danh sách yêu thích..."
+                overlayOpacity={0.6}
+            />
+
             {/* Error Alert */}
             {cartError && (
                 <div className="bg-red-50 border-l-4 border-red-400 p-4 mx-4 mt-4">
@@ -372,8 +420,8 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                     {/* Gallery Section */}
                     <div className="space-y-6">
                         {/* Main Image */}
-                        <Card className="overflow-hidden rounded-3xl shadow-xl border-0 bg-white cursor-pointer" 
-                              onClick={() => handleImageClick(0)}>
+                        <Card className="overflow-hidden rounded-3xl shadow-xl border-0 bg-white cursor-pointer"
+                            onClick={() => handleImageClick(0)}>
                             <div className="relative aspect-square bg-gradient-to-br from-orange-50 to-amber-50">
                                 <Image
                                     src={mainImage}
@@ -415,19 +463,19 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                                     <Button
                                         size="icon"
                                         variant="secondary"
-                                        className={`rounded-full bg-white/90 backdrop-blur-sm hover:bg-white shadow-lg transition-all ${
-                                            isInWishlist ? 'text-red-500' : 'hover:text-orange-600'
-                                        }`}
+                                        className={`rounded-full bg-white/90 backdrop-blur-sm hover:bg-white shadow-lg transition-all ${isInWishlist ? 'text-red-500' : 'hover:text-orange-600'
+                                            }`}
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            setIsInWishlist(!isInWishlist);
+                                            handleWishlist(); // Sử dụng handler mới
                                         }}
+                                        disabled={isWishlistLoading}
                                     >
                                         <Heart className={`w-4 h-4 ${isInWishlist ? 'fill-current' : ''}`} />
                                     </Button>
-                                    <Button 
-                                        size="icon" 
-                                        variant="secondary" 
+                                    <Button
+                                        size="icon"
+                                        variant="secondary"
                                         className="rounded-full bg-white/90 backdrop-blur-sm hover:bg-white shadow-lg hover:text-orange-600 transition-all"
                                         onClick={(e) => e.stopPropagation()}
                                     >
@@ -541,13 +589,12 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                                                     key={idx}
                                                     variant="outline"
                                                     disabled={!isAvailable}
-                                                    className={`px-4 py-2 rounded-2xl border-2 transition-all duration-200 hover:scale-105 ${
-                                                        selectedColor === color
+                                                    className={`px-4 py-2 rounded-2xl border-2 transition-all duration-200 hover:scale-105 ${selectedColor === color
                                                             ? 'border-orange-500 bg-orange-50 text-orange-600'
                                                             : isAvailable
-                                                            ? 'hover:border-orange-500 hover:bg-orange-50'
-                                                            : 'opacity-50 cursor-not-allowed border-gray-200 text-gray-400'
-                                                    }`}
+                                                                ? 'hover:border-orange-500 hover:bg-orange-50'
+                                                                : 'opacity-50 cursor-not-allowed border-gray-200 text-gray-400'
+                                                        }`}
                                                     onClick={() => handleColorSelect(color)}
                                                 >
                                                     <div className="flex items-center gap-2">
@@ -592,13 +639,12 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                                                     key={idx}
                                                     variant="outline"
                                                     disabled={!isAvailable}
-                                                    className={`h-12 rounded-2xl border-2 transition-all duration-200 hover:scale-105 font-medium relative ${
-                                                        selectedSize === size
+                                                    className={`h-12 rounded-2xl border-2 transition-all duration-200 hover:scale-105 font-medium relative ${selectedSize === size
                                                             ? 'border-orange-500 bg-orange-50 text-orange-600'
                                                             : isAvailable
-                                                            ? 'hover:border-orange-500 hover:bg-orange-50'
-                                                            : 'opacity-50 cursor-not-allowed border-gray-200 text-gray-400'
-                                                    }`}
+                                                                ? 'hover:border-orange-500 hover:bg-orange-50'
+                                                                : 'opacity-50 cursor-not-allowed border-gray-200 text-gray-400'
+                                                        }`}
                                                     onClick={() => handleSizeSelect(size)}
                                                 >
                                                     <div className="flex flex-col items-center">
@@ -670,11 +716,10 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                         )}
 
                         {/* Stock Status */}
-                        <Card className={`p-4 rounded-2xl border-0 shadow-md ${
-                            computedValues.isOutOfStock()
+                        <Card className={`p-4 rounded-2xl border-0 shadow-md ${computedValues.isOutOfStock()
                                 ? 'bg-gradient-to-r from-red-50 to-red-100'
                                 : 'bg-gradient-to-r from-green-50 to-emerald-50'
-                        }`}>
+                            }`}>
                             <div className="flex items-center gap-3">
                                 <Package className={`w-5 h-5 ${computedValues.isOutOfStock() ? 'text-red-600' : 'text-green-600'}`} />
                                 {selectedVariant ? (
@@ -705,11 +750,10 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                                 <Button
                                     size="lg"
                                     variant="outline"
-                                    className={`h-14 text-base font-semibold rounded-2xl border-2 transition-all duration-300 hover:scale-105 ${
-                                        addedToCart
+                                    className={`h-14 text-base font-semibold rounded-2xl border-2 transition-all duration-300 hover:scale-105 ${addedToCart
                                             ? 'border-green-500 bg-green-50 text-green-600'
                                             : 'border-orange-300 text-orange-600 hover:bg-orange-50 hover:border-orange-400'
-                                    }`}
+                                        }`}
                                     disabled={!computedValues.canAddToCart()}
                                     onClick={handleAddToCart}
                                 >

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
@@ -32,14 +32,19 @@ import {
 import { OrderStats } from '@/types/orderStats';
 import { UserProfile } from '@/types/userProfile';
 import { OrderInfo } from '@/types/orderInfo';
+import { useSearchParams } from 'next/navigation';
 
 export default function ProfilePage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { user, logout, loading: authLoading } = useAuth();
 
     const [saving, setSaving] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
-    const [activeTab, setActiveTab] = useState('overview');
+    const [activeTab, setActiveTab] = useState(() => {
+        return searchParams.get('tab') || 'overview';
+    });
+
     const [successMessage, setSuccessMessage] = useState('');
     const [errorMessage, setErrorMessage] = useState('');
 
@@ -129,35 +134,39 @@ export default function ProfilePage() {
     };
 
     // Function để fetch orders
-    const fetchOrders = async () => {
+    const fetchOrders = useCallback(async () => {
         if (!user) return;
 
         setLoadingOrders(true);
+        setErrorMessage(''); // Reset error message
+
         try {
             let query = supabase
                 .from('orders')
                 .select(`
-                    *,
-                    order_items (
+                *,
+                order_items (
+                id,
+                quantity,
+                price,
+                product_variants (
                     id,
-                    quantity,
-                    price,
-                    product_variants (
-                        id,
-                        sku,
-                        products (
-                        id,
-                        name,
-                        product_images (
-                            image_url,
-                            sort_order
-                        )
-                        )
+                    sku,
+                    products (
+                    id,
+                    name,
+                    product_images (
+                        image_url,
+                        sort_order
                     )
                     )
-                `)
+                )
+                )
+            `)
                 .eq('user_id', user.id)
                 .order('created_at', { ascending: false });
+
+
 
             if (selectedStatus !== 'all') {
                 query = query.eq('status', selectedStatus);
@@ -165,13 +174,11 @@ export default function ProfilePage() {
 
             const { data, error } = await query;
 
-            console.log("data", data);
-
+            setLoadingOrders(false);
 
             if (error) throw error;
 
-            // Transform data to match OrderInfo interface
-            const transformedOrders: OrderInfo[] = data?.map(order => ({
+            const transformedOrders = data?.map(order => ({
                 id: order.id,
                 order_code: order.order_code,
                 user_id: order.user_id,
@@ -193,7 +200,7 @@ export default function ProfilePage() {
         } finally {
             setLoadingOrders(false);
         }
-    };
+    }, [user?.id, selectedStatus]);
 
     // Check authentication
     useEffect(() => {
@@ -216,10 +223,11 @@ export default function ProfilePage() {
 
     // Fetch orders when orders tab is active - moved to after all state initialization
     useEffect(() => {
-        if (activeTab === 'orders' && user) {
+        if (activeTab === 'orders') {
             fetchOrders();
         }
-    }, [activeTab, user, selectedStatus]); // Added selectedStatus as dependency
+    }, [activeTab, fetchOrders]);
+
 
     const handleSaveProfile = async () => {
         if (!user) return;
@@ -272,6 +280,24 @@ export default function ProfilePage() {
         await logout();
         router.push('/');
     };
+
+    const handleTabChange = (newTab: string) => {
+        setActiveTab(newTab);
+
+        // Chỉ lấy pathname + search, không truyền nguyên URL đầy đủ
+        const params = new URLSearchParams(window.location.search);
+        params.set('tab', newTab);
+        const newPath = `${window.location.pathname}?${params.toString()}`;
+
+        router.replace(newPath, { scroll: false });
+    };
+
+    useEffect(() => {
+        const tabFromUrl = searchParams.get('tab');
+        if (tabFromUrl && ['overview', 'orders', 'wishlist', 'settings'].includes(tabFromUrl)) {
+            setActiveTab(tabFromUrl);
+        }
+    }, [searchParams]);
 
     const membership = getMembershipLevel();
 
@@ -339,7 +365,7 @@ export default function ProfilePage() {
                                 {/* Navigation Menu */}
                                 <nav className="space-y-2">
                                     <button
-                                        onClick={() => setActiveTab('overview')}
+                                        onClick={() => handleTabChange('overview')}
                                         className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all ${activeTab === 'overview'
                                             ? 'bg-orange-100 text-orange-600'
                                             : 'hover:bg-gray-100 text-gray-600'
@@ -350,7 +376,7 @@ export default function ProfilePage() {
                                     </button>
 
                                     <button
-                                        onClick={() => setActiveTab('orders')}
+                                        onClick={() => handleTabChange('orders')}
                                         className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all ${activeTab === 'orders'
                                             ? 'bg-orange-100 text-orange-600'
                                             : 'hover:bg-gray-100 text-gray-600'
@@ -366,7 +392,7 @@ export default function ProfilePage() {
                                     </button>
 
                                     <button
-                                        onClick={() => setActiveTab('wishlist')}
+                                        onClick={() => handleTabChange('wishlist')}
                                         className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all ${activeTab === 'wishlist'
                                             ? 'bg-orange-100 text-orange-600'
                                             : 'hover:bg-gray-100 text-gray-600'
@@ -377,7 +403,7 @@ export default function ProfilePage() {
                                     </button>
 
                                     <button
-                                        onClick={() => setActiveTab('settings')}
+                                        onClick={() => handleTabChange('settings')}
                                         className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all ${activeTab === 'settings'
                                             ? 'bg-orange-100 text-orange-600'
                                             : 'hover:bg-gray-100 text-gray-600'
@@ -782,7 +808,7 @@ export default function ProfilePage() {
 
 
                                                     {/* Action Buttons */}
-                                                    <div className="flex flex-wrap gap-3 pt-4 border-t border-gray-100">
+                                                    {/* <div className="flex flex-wrap gap-3 pt-4 border-t border-gray-100">
                                                         <Button
                                                             variant="outline"
                                                             size="sm"
@@ -821,7 +847,7 @@ export default function ProfilePage() {
                                                                 Mua lại
                                                             </Button>
                                                         )}
-                                                    </div>
+                                                    </div> */}
                                                 </CardContent>
                                             </Card>
                                         ))}
@@ -869,41 +895,6 @@ export default function ProfilePage() {
                     </div>
                 </div>
             </div>
-
-            <style jsx>{`
-        .toggle {
-          position: relative;
-          width: 48px;
-          height: 24px;
-          -webkit-appearance: none;
-          appearance: none;
-          background: #ddd;
-          outline: none;
-          border-radius: 20px;
-          cursor: pointer;
-          transition: 0.3s;
-        }
-
-        .toggle:checked {
-          background: #f97316;
-        }
-
-        .toggle:before {
-          content: '';
-          position: absolute;
-          width: 20px;
-          height: 20px;
-          border-radius: 50%;
-          top: 2px;
-          left: 2px;
-          background: white;
-          transition: 0.3s;
-        }
-
-        .toggle:checked:before {
-          left: 26px;
-        }
-      `}</style>
         </div>
     );
 }

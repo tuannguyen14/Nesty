@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
@@ -86,28 +86,31 @@ export default function OrdersPage() {
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortBy, setSortBy] = useState('newest');
   const [activeTab, setActiveTab] = useState('all');
 
-  useEffect(() => {
-    if (!userLoading && !user) {
-      router.push('/login');
-    } else {
-      fetchOrders();
-    }
-  }, [user, router]);
+  // Sử dụng useCallback để tránh re-create function
+  const fetchOrders = useCallback(async () => {
+    if (!user?.id) return;
 
-  const fetchOrders = async () => {
+    console.log('Fetching orders for user:', user.id);
+    setLoading(true);
+    setError(null);
+
     try {
       const { data, error } = await supabase
         .from('orders')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
 
       console.log('Fetched orders:', data);
 
@@ -129,12 +132,38 @@ export default function OrdersPage() {
       }));
 
       setOrders(ordersWithItems);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching orders:', error);
+      setError(error.message || 'Không thể tải đơn hàng');
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id]); // Chỉ phụ thuộc vào user.id
+
+  // Effect để handle authentication và redirect
+  useEffect(() => {
+    // Nếu đang load user thì chờ
+    if (userLoading) {
+      console.log('User is loading...');
+      return;
+    }
+
+    // Nếu không có user thì redirect
+    if (!user) {
+      console.log('No user found, redirecting to login');
+      router.push('/login');
+      return;
+    }
+
+    console.log('User authenticated:', user.id);
+  }, [user, userLoading, router]);
+
+  // Effect riêng để fetch orders khi user đã sẵn sàng
+  useEffect(() => {
+    if (!userLoading && user?.id) {
+      fetchOrders();
+    }
+  }, [userLoading, user?.id, fetchOrders]);
 
   const getFilteredOrders = () => {
     let filtered = orders;
@@ -277,10 +306,37 @@ export default function OrdersPage() {
     );
   };
 
-  if (loading) {
+  // Show loading khi đang load user hoặc orders
+  if (userLoading || (loading && !error)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">
+            {userLoading ? 'Đang xác thực...' : 'Đang tải đơn hàng...'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Card className="max-w-md mx-auto">
+          <CardContent className="text-center py-8">
+            <XCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-gray-800 mb-2">Có lỗi xảy ra</h3>
+            <p className="text-gray-600 mb-4">{error}</p>
+            <Button
+              onClick={() => fetchOrders()}
+              className="bg-orange-500 hover:bg-orange-600"
+            >
+              Thử lại
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }

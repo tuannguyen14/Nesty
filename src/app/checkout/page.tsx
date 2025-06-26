@@ -41,6 +41,7 @@ import vietnamProvinces from '@/data/provinces/VietnamProvinces.json';
 
 import { ShippingInfo } from '@/types/shippingInfo';
 import { PaymentMethod } from '@/types/paymentMethod';
+import OverlayLoading from "@/components/loading/OverlayLoading";
 
 const paymentMethods: PaymentMethod[] = [
   {
@@ -175,20 +176,13 @@ export default function CheckoutPage() {
     }
   }, [shippingInfo.district]);
 
-  // 🔥 SHOW LOADING UNTIL EVERYTHING IS READY
-  if (!navigationReady || userLoading || cartLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-orange-50/30 via-white to-orange-50/30 flex items-center justify-center">
-        <Card className="border-0 shadow-xl bg-white rounded-3xl overflow-hidden">
-          <CardContent className="text-center py-20">
-            <Loader2 className="w-16 h-16 text-orange-500 mx-auto mb-4 animate-spin" />
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">Đang tải...</h2>
-            <p className="text-gray-600">Vui lòng đợi trong giây lát.</p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (!navigationReady || userLoading || cartLoading) {
+      setLoading(true)
+    } else {
+      setLoading(false)
+    }
+  }, [navigationReady, userLoading, cartLoading]);
 
   // 🔥 SHOW EMPTY CART ONLY AFTER LOADING IS COMPLETE
   if (!userLoading && !cartLoading && items.length === 0) {
@@ -392,7 +386,7 @@ export default function CheckoutPage() {
       await clearCart();
 
       // Redirect to success page
-      router.push(`/checkout/success?orderId=${order.id}`);
+      router.push(`/profile?tab=orders`);
     } catch (error: any) {
       console.error('Error creating order:', error);
       alert('Có lỗi xảy ra khi đặt hàng: ' + (error.message || 'Vui lòng thử lại!'));
@@ -860,6 +854,10 @@ export default function CheckoutPage() {
           </div>
         </div>
       </div>
+      <OverlayLoading
+        isVisible={loading}
+        message="Đang xử lý yêu cầu của bạn..."
+      />
     </div>
   );
 }

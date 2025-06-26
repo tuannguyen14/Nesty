@@ -5,7 +5,7 @@ AS $$
 DECLARE
     current_date_str TEXT;
     sequence_num INT;
-    order_code TEXT;
+    generated_order_code TEXT;
     max_attempts INT := 10;
     attempt INT := 0;
 BEGIN
@@ -16,14 +16,14 @@ BEGIN
         SELECT COALESCE(COUNT(*), 0) + 1 + attempt
         INTO sequence_num
         FROM orders 
-        WHERE order_code LIKE 'ODR-' || current_date_str || '-%';
+        WHERE orders.order_code LIKE 'ODR-' || current_date_str || '-%';
         
         -- Tạo order_code
-        order_code := 'ODR-' || current_date_str || '-' || LPAD(sequence_num::TEXT, 5, '0');
+        generated_order_code := 'ODR-' || current_date_str || '-' || LPAD(sequence_num::TEXT, 5, '0');
         
         -- Kiểm tra xem code đã tồn tại chưa
-        IF NOT EXISTS (SELECT 1 FROM orders WHERE order_code = order_code) THEN
-            RETURN order_code;
+        IF NOT EXISTS (SELECT 1 FROM orders WHERE orders.order_code = generated_order_code) THEN
+            RETURN generated_order_code;
         END IF;
         
         attempt := attempt + 1;

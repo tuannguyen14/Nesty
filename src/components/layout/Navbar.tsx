@@ -11,6 +11,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Category } from '@/types/category';
 import { MenuType } from '@/types/menuType';
 
+import OverlayLoading from "@/components/loading/OverlayLoading";
 
 export default function Navbar() {
     const { user, loading, logout } = useAuth();
@@ -268,14 +269,14 @@ export default function Navbar() {
                                                         <p className="text-xs text-gray-500 mt-0.5">ID: {user.id.slice(0, 8)}...</p>
                                                     </div>
                                                     <Link
-                                                        href="/profile"
+                                                        href="/profile?tab=overview"
                                                         className="block px-4 py-2.5 text-gray-700 hover:bg-orange-50 hover:text-orange-600 transition-all duration-200 text-sm"
                                                         onClick={() => closeMenu(MenuType.ACCOUNT)}
                                                     >
                                                         Thông tin cá nhân
                                                     </Link>
                                                     <Link
-                                                        href="/profile"
+                                                        href="/profile?tab=orders"
                                                         className="block px-4 py-2.5 text-gray-700 hover:bg-orange-50 hover:text-orange-600 transition-all duration-200 text-sm"
                                                         onClick={() => closeMenu(MenuType.ACCOUNT)}
                                                     >
@@ -447,14 +448,14 @@ export default function Navbar() {
                             ) : (
                                 <>
                                     <Link
-                                        href="/profile"
+                                        href="//profile?tab=overview"
                                         className="block py-3 text-gray-700 hover:text-orange-600 font-medium"
                                         onClick={closeAllMenus}
                                     >
                                         Thông tin cá nhân
                                     </Link>
                                     <Link
-                                        href="/profile"
+                                        href="//profile?tab=oders"
                                         className="block py-3 text-gray-700 hover:text-orange-600"
                                         onClick={closeAllMenus}
                                     >
@@ -495,6 +496,11 @@ export default function Navbar() {
                     onClick={closeAllMenus}
                 />
             )}
+
+            <OverlayLoading
+                isVisible={loading}
+                message="Đang xử lý yêu cầu của bạn..."
+            />
         </>
     );
 }

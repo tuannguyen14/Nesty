@@ -42,10 +42,6 @@ const categoryIcons: { [key: string]: any } = {
   'default': ShoppingBag
 };
 
-const getCategoryIcon = (slug: string) => {
-  return categoryIcons[slug] || categoryIcons['default'];
-};
-
 export function CategoriesSection({ categories }: CategoriesSectionProps) {
   if (!categories || categories.length === 0) {
     return null;
