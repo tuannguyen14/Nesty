@@ -9,28 +9,36 @@ import { Category, ProductWithDetails } from '@/types/product';
 import ProductForm from '@/components/admin/ProductForm';
 import StatsCards from '@/components/admin/StatsCards';
 import ProductsGrid from '@/components/admin/ProductsGrid';
-import Loading from '@/components/ui/Loading';
+import OverlayLoading from '@/components/loading/OverlayLoading';
 
 import { useAuth } from '@/hooks/useAuth';
+import {
+    Plus,
+    Search,
+    Filter
+} from 'lucide-react';
+import { NavigationBar } from '@/components/admin/NavigationBar';
 
 export default function AdminPage() {
     const router = useRouter();
-    const { user, loading } = useAuth();
+    const { user, loading: userLoading } = useAuth();
     const [loadingUI, setLoadingUI] = useState(true);
     const [isAdmin, setIsAdmin] = useState(false);
     const [products, setProducts] = useState<ProductWithDetails[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
     const [showForm, setShowForm] = useState(false);
     const [editingProduct, setEditingProduct] = useState<ProductWithDetails | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
     // Kiểm tra role admin
     useEffect(() => {
-        if (loading) return;
+        if (userLoading) return;
 
         const checkAdmin = async () => {
             console.log('Checking admin role...');
             console.log('Current user:', user);
-            
+
             if (!user) {
                 router.push('/login');
                 return;
@@ -48,7 +56,7 @@ export default function AdminPage() {
         };
 
         checkAdmin();
-    }, [user, loading, router]);
+    }, [user, userLoading, router]);
 
     // Lấy danh sách categories
     const fetchCategories = async () => {
@@ -117,7 +125,7 @@ export default function AdminPage() {
                 const transformedProducts = data.map((product: any) => {
                     const variants = product.variants || [];
                     const images = product.images || [];
-                    
+
                     return {
                         id: product.id,
                         name: product.name,
@@ -146,6 +154,13 @@ export default function AdminPage() {
         }
     };
 
+    // Filter products based on search and category
+    const filteredProducts = products.filter(product => {
+        const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesCategory = selectedCategory === 'all' || product.category_id?.toString() === selectedCategory;
+        return matchesSearch && matchesCategory;
+    });
+
     // Xóa sản phẩm (cascade sẽ tự động xóa images và variants)
     const handleDeleteProduct = async (product: ProductWithDetails) => {
         if (!confirm(`Bạn có chắc chắn muốn xóa sản phẩm "${product.name}"? Hành động này không thể hoàn tác.`)) {
@@ -164,7 +179,7 @@ export default function AdminPage() {
 
             // Refresh products list
             await fetchProducts();
-            
+
             // Show success message
             alert('Xóa sản phẩm thành công!');
         } catch (error: any) {
@@ -198,13 +213,8 @@ export default function AdminPage() {
         setEditingProduct(null);
     };
 
-    // Loading state
-    if (loading || loadingUI) {
-        return <Loading />;
-    }
-
     // Unauthorized access
-    if (!isAdmin) {
+    if (!userLoading && !isAdmin) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-50">
                 <div className="text-center">
@@ -222,45 +232,71 @@ export default function AdminPage() {
     }
 
     return (
-        <div className="min-h-screen bg-gray-50">
-            {/* Header */}
-            <div className="bg-white shadow-sm border-b">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex justify-between items-center py-6">
-                        <div>
-                            <h1 className="text-3xl font-bold text-gray-900">Quản lý sản phẩm</h1>
-                            <p className="mt-1 text-sm text-gray-500">
-                                Thêm, sửa và quản lý các sản phẩm trong cửa hàng
-                            </p>
-                            <p className="text-xs text-gray-400 mt-1">
-                                Tổng: {products.length} sản phẩm
-                            </p>
-                        </div>
-                        <button
-                            onClick={showForm ? handleFormCancel : handleAddProduct}
-                            className={`inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors ${
-                                showForm
-                                    ? 'bg-gray-600 hover:bg-gray-700 focus:ring-gray-500'
-                                    : 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500'
-                            }`}
-                        >
-                            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                {showForm ? (
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                ) : (
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                                )}
-                            </svg>
-                            {showForm ? 'Hủy' : 'Thêm sản phẩm'}
-                        </button>
-                    </div>
-                </div>
-            </div>
+        <div className="min-h-screen bg-gray-100">
+            {/* Navigation Bar */}
+            <NavigationBar />
 
+            {/* Main Content */}
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                {/* Page Header */}
+                {!showForm && (
+                    <div className="mb-8">
+                        <div className="flex justify-between items-start mb-6">
+                            <div>
+                                <h2 className="text-3xl font-bold text-gray-900">Quản lý sản phẩm</h2>
+                                <p className="mt-1 text-gray-600">
+                                    Có {filteredProducts.length} sản phẩm trong cửa hàng
+                                </p>
+                            </div>
+                            <button
+                                onClick={handleAddProduct}
+                                className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                            >
+                                <Plus className="w-5 h-5 mr-2" />
+                                Thêm sản phẩm
+                            </button>
+                        </div>
+
+                        {/* Search and Filter Bar */}
+                        <div className="flex gap-4 mb-6">
+                            <div className="flex-1 relative">
+                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                                <input
+                                    type="text"
+                                    placeholder="Tìm kiếm sản phẩm..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                            </div>
+                            <div className="flex items-center">
+                                <Filter className="w-5 h-5 text-gray-400 mr-2" />
+                                <select
+                                    value={selectedCategory}
+                                    onChange={(e) => setSelectedCategory(e.target.value)}
+                                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                >
+                                    <option value="all">Tất cả danh mục</option>
+                                    {categories.map(category => (
+                                        <option key={category.id} value={category.id}>
+                                            {category.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Form thêm/sửa sản phẩm */}
                 {showForm && (
                     <div className="mb-8">
+                        <button
+                            onClick={handleFormCancel}
+                            className="mb-4 text-gray-600 hover:text-gray-900 flex items-center"
+                        >
+                            ← Quay lại
+                        </button>
                         <ProductForm
                             product={editingProduct}
                             categories={categories}
@@ -276,13 +312,18 @@ export default function AdminPage() {
                 {/* Products Grid */}
                 {!showForm && (
                     <ProductsGrid
-                        products={products}
+                        products={filteredProducts}
                         onEdit={handleEditProduct}
                         onDelete={handleDeleteProduct}
                         onAddProduct={handleAddProduct}
                     />
                 )}
             </div>
+
+            <OverlayLoading
+                isVisible={userLoading || loadingUI}
+                message="Đang xử lý yêu cầu của bạn..."
+            />
         </div>
     );
 }

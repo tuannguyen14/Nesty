@@ -3,12 +3,13 @@ import Navbar from '@/components/layout/Navbar';
 import Footer from "@/components/layout/Footer";
 import { AuthProvider } from '@/hooks/useAuth';
 import { CartProvider } from '@/contexts/CartProvider';
-import { 
-  RootErrorBoundary, 
-  NavigationErrorBoundary, 
-  ContentErrorBoundary, 
-  FooterErrorBoundary 
+import {
+  RootErrorBoundary,
+  NavigationErrorBoundary,
+  ContentErrorBoundary,
+  FooterErrorBoundary
 } from '@/components/ui/ClientErrorBoundary';
+import ContactButtons from '@/components/ui/ContactButtons';
 
 export default function RootLayout({
   children,
@@ -24,13 +25,14 @@ export default function RootLayout({
               <NavigationErrorBoundary>
                 <Navbar />
               </NavigationErrorBoundary>
-              
+
               <main>
                 <ContentErrorBoundary>
                   {children}
+                  <ContactButtons />
                 </ContentErrorBoundary>
               </main>
-              
+
               <FooterErrorBoundary>
                 <Footer />
               </FooterErrorBoundary>
