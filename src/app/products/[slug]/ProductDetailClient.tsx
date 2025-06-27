@@ -993,7 +993,7 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                 </div>
             </div>
 
-            {/* Lightbox */}
+            {/* Lightbox! */}
             {lightboxOpen && lightboxSlides.length > 0 && (
                 <Lightbox
                     open={lightboxOpen}
