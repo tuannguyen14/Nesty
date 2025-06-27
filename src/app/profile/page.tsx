@@ -33,8 +33,9 @@ import { OrderStats } from '@/types/orderStats';
 import { UserProfile } from '@/types/userProfile';
 import { OrderInfo } from '@/types/orderInfo';
 import { useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
 
-export default function ProfilePage() {
+function NewProfilePage() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { user, logout, loading: authLoading } = useAuth();
@@ -898,3 +899,13 @@ export default function ProfilePage() {
         </div>
     );
 }
+
+function ProfilePage() {
+    return (
+        <Suspense>
+            <NewProfilePage />
+        </Suspense>
+    );
+}
+
+export default ProfilePage;

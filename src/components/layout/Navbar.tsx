@@ -506,7 +506,7 @@ export default function Navbar() {
             )}
 
             <OverlayLoading
-                isVisible={userLoading || loading || cartLoading || categoriesLoading}
+                isVisible={userLoading || loading ||cartLoading || categoriesLoading}
                 message="Đang xử lý yêu cầu của bạn..."
             />
         </>

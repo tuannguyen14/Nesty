@@ -72,16 +72,6 @@ export function CTASection() {
             Chat ngay với tư vấn viên
             <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
           </Button>
-          
-          {/* <Button
-            size="lg"
-            variant="outline"
-            onClick={() => router.push('/catalog')}
-            className="border-2 border-white text-white hover:bg-white/10 backdrop-blur-sm px-8 py-4 text-lg font-semibold rounded-2xl transition-all duration-300 hover-lift"
-          >
-            <Mail className="w-5 h-5 mr-2" />
-            Gửi yêu cầu tư vấn
-          </Button> */}
         </div>
 
         {/* Trust Indicators */}
