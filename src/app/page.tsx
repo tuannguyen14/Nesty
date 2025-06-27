@@ -1,5 +1,4 @@
 import { supabase } from '@/lib/supabase';
-import { ProductWithRelations } from '@/types/product';
 import { HeroSection } from '@/components/home/HeroSection';
 import { CategoriesSection } from '@/components/home/CategoriesSection';
 import { ProductsSection } from '@/components/home/ProductsSection';

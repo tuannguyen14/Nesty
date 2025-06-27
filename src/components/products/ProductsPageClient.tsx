@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { ProductWithRelations, Category } from '@/types/product';
 import { ProductCard } from '@/components/products/ProductCard';
 import { Button } from '@/components/ui/button';
@@ -10,15 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { 
-  Search, 
-  Filter, 
+  Search,
   Grid3x3, 
   List, 
   Package, 
   ChevronLeft, 
   ChevronRight,
-  X,
-  SlidersHorizontal
+  X
 } from 'lucide-react';
 
 interface SearchParams {
@@ -47,7 +45,6 @@ export function ProductsPageClient({
 }: ProductsPageClientProps) {
   const router = useRouter();
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [showFilters, setShowFilters] = useState(false);
   const [searchValue, setSearchValue] = useState(searchParams.search || '');
 
   const updateURL = (newParams: Partial<SearchParams>) => {

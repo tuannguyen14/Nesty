@@ -42,8 +42,7 @@ import {
   FileText,
   TrendingUp,
   AlertCircle,
-  Copy,
-  ExternalLink
+  Copy
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { DateRange } from 'react-day-picker'

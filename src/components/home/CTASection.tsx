@@ -1,7 +1,7 @@
 'use client';
 
 import { Button } from "@/components/ui/button";
-import { MessageCircle, HeadphonesIcon, Mail, ArrowRight } from 'lucide-react';
+import { MessageCircle, HeadphonesIcon, ArrowRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 export function CTASection() {

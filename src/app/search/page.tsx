@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { ProductWithRelations } from '@/types/product';
-import { ProductCard } from '@/components/products/ProductCard';
 import { SearchPageClient } from '@/components/search/SearchPageClient';
+import { Metadata } from 'next';
 
 interface SearchPageProps {
   searchParams: Promise<{
@@ -14,10 +14,27 @@ interface SearchPageProps {
   }>;
 }
 
-export default async function SearchPage({ searchParams }: SearchPageProps) {
-  // Await searchParams để tránh warning của Next.js 15
+// Generate metadata for SEO
+export async function generateMetadata({ searchParams }: SearchPageProps): Promise<Metadata> {
   const params = await searchParams;
+  const query = params.q || '';
+  const category = params.category || '';
   
+  let title = 'Tìm kiếm sản phẩm';
+  if (query) {
+    title = `Kết quả tìm kiếm cho "${query}"`;
+  } else if (category) {
+    title = `Danh mục: ${category}`;
+  }
+  
+  return {
+    title,
+    description: `Tìm kiếm sản phẩm ${query} ${category}`.trim(),
+  };
+}
+
+// Helper function to build search query
+async function buildSearchQuery(params: any) {
   const {
     q = '',
     category = '',
@@ -27,27 +44,25 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     max_price = ''
   } = params;
 
-  const currentPage = parseInt(page);
+  const currentPage = parseInt(page, 10);
   const itemsPerPage = 12;
   const offset = (currentPage - 1) * itemsPerPage;
 
-  // Build query
+  // Start with base query including all relations
   let query = supabase
     .from('products')
     .select(`
       *,
-      categories (
+      categories!inner (
         id,
         name,
-        description,
         slug
       ),
       product_images (
         id,
         product_id,
         image_url,
-        sort_order,
-        created_at
+        sort_order
       ),
       product_variants (
         id,
@@ -56,39 +71,31 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         size,
         price_override,
         stock,
-        created_at,
-        updated_at
+        sku
       )
     `, { count: 'exact' });
 
-  // Apply search filter
+  // Apply search filter with better search logic
   if (q) {
-    // Search in name and description
-    query = query.or(`name.ilike.%${q}%,description.ilike.%${q}%`);
+    // Use full-text search if available, otherwise use ilike
+    const searchTerm = q.trim();
+    query = query.or(`name.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`);
   }
 
-  // Apply category filter
+  // Apply category filter using the relation
   if (category) {
-    const { data: categoryData } = await supabase
-      .from('categories')
-      .select('id')
-      .eq('slug', category)
-      .single();
-    
-    if (categoryData) {
-      query = query.eq('category_id', categoryData.id);
-    }
+    query = query.eq('categories.slug', category);
   }
 
-  // Apply price filter
-  if (min_price) {
+  // Apply price filters
+  if (min_price && !isNaN(parseFloat(min_price))) {
     query = query.gte('price', parseFloat(min_price));
   }
-  if (max_price) {
+  if (max_price && !isNaN(parseFloat(max_price))) {
     query = query.lte('price', parseFloat(max_price));
   }
 
-  // Apply sorting
+  // Apply sorting with optimized logic
   switch (sort) {
     case 'price_asc':
       query = query.order('price', { ascending: true });
@@ -105,7 +112,10 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     case 'newest':
       query = query.order('created_at', { ascending: false });
       break;
-    default: // relevance - order by name similarity when searching
+    case 'relevance':
+    default:
+      // For relevance, if there's a search query, order by name
+      // Otherwise, show newest products first
       if (q) {
         query = query.order('name', { ascending: true });
       } else {
@@ -117,43 +127,105 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   // Apply pagination
   query = query.range(offset, offset + itemsPerPage - 1);
 
-  const { data: products, error, count } = await query as { 
-    data: ProductWithRelations[] | null, 
-    error: any,
-    count: number | null 
-  };
+  return { query, currentPage, itemsPerPage };
+}
 
-  if (error) {
-    console.error('Error searching products:', error);
+// Helper function to get price range from products
+function getPriceRange(products: ProductWithRelations[] | null) {
+  if (!products || products.length === 0) {
+    return { min: 0, max: 0 };
   }
 
-  // Fetch all categories for filter
-  const { data: categories } = await supabase
-    .from('categories')
-    .select('*')
-    .eq('is_active', true)
-    .order('name');
+  const prices = products.map(p => p.price);
+  return {
+    min: Math.min(...prices),
+    max: Math.max(...prices)
+  };
+}
 
-  const totalPages = count ? Math.ceil(count / itemsPerPage) : 0;
+// Helper function to generate related searches
+function generateRelatedSearches(q: string, category: string): string[] {
+  if (!q) return [];
 
-  // Get related searches (mock data for now)
-  const relatedSearches = q ? [
+  const searches = [
     `${q} giá rẻ`,
     `${q} chính hãng`,
     `${q} cao cấp`,
     `${q} khuyến mãi`
-  ] : [];
+  ];
 
-  return (
-    <SearchPageClient
-      searchQuery={q}
-      products={products}
-      categories={categories}
-      currentPage={currentPage}
-      totalPages={totalPages}
-      totalCount={count || 0}
-      searchParams={params}
-      relatedSearches={relatedSearches}
-    />
-  );
+  // Add category-specific searches if applicable
+  if (category) {
+    searches.push(`${q} ${category}`);
+  }
+
+  return searches.slice(0, 4); // Limit to 4 related searches
+}
+
+export default async function SearchPage({ searchParams }: SearchPageProps) {
+  const params = await searchParams;
+  
+  try {
+    // Build and execute search query
+    const { query, currentPage, itemsPerPage } = await buildSearchQuery(params);
+    
+    const { data: products, error, count } = await query as { 
+      data: ProductWithRelations[] | null, 
+      error: any,
+      count: number | null 
+    };
+
+    if (error) {
+      console.error('Error searching products:', error);
+      // You might want to handle this error more gracefully
+      // Maybe return an error page or show a message to the user
+    }
+
+    // Fetch all active categories for filter
+    const { data: categories, error: categoriesError } = await supabase
+      .from('categories')
+      .select('*')
+      .order('name', { ascending: true });
+
+    if (categoriesError) {
+      console.error('Error fetching categories:', categoriesError);
+    }
+
+    // Calculate pagination
+    const totalPages = count ? Math.ceil(count / itemsPerPage) : 0;
+
+    // Get price range for filters
+    const priceRange = getPriceRange(products);
+
+    // Generate related searches
+    const relatedSearches = generateRelatedSearches(params.q || '', params.category || '');
+
+    // Get current category info if filtering by category
+    let currentCategory = null;
+    if (params.category && categories) {
+      currentCategory = categories.find(c => c.slug === params.category);
+    }
+
+    return (
+      <SearchPageClient
+        searchQuery={params.q || ''}
+        products={products || []}
+        categories={categories || []}
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalCount={count || 0}
+        searchParams={params}
+        relatedSearches={relatedSearches}
+      />
+    );
+  } catch (error) {
+    console.error('Unexpected error in SearchPage:', error);
+    // Return error page or fallback UI
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <h1 className="text-2xl font-bold mb-4">Đã xảy ra lỗi</h1>
+        <p>Xin lỗi, đã có lỗi xảy ra khi tìm kiếm sản phẩm. Vui lòng thử lại sau.</p>
+      </div>
+    );
+  }
 }

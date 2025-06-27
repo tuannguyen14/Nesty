@@ -1,18 +1,7 @@
 import Link from 'next/link';
 import { Card, CardContent } from "@/components/ui/card";
 import {
-  Package,
-  Shirt,
-  Home,
-  Utensils,
-  Tv,
-  BookOpen,
-  Heart,
-  Dumbbell,
-  Baby,
-  ShoppingBag,
   Sparkles,
-  Flower
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -26,21 +15,6 @@ interface Category {
 interface CategoriesSectionProps {
   categories: Category[] | null;
 }
-
-// Icon mapping cho categories
-const categoryIcons: { [key: string]: any } = {
-  'thoi-trang': Shirt,
-  'noi-that': Home,
-  'do-gia-dung': Utensils,
-  'dien-tu': Tv,
-  'sach': BookOpen,
-  'suc-khoe': Heart,
-  'the-thao': Dumbbell,
-  'me-be': Baby,
-  'my-pham': Sparkles,
-  'hoa-qua': Flower,
-  'default': ShoppingBag
-};
 
 export function CategoriesSection({ categories }: CategoriesSectionProps) {
   if (!categories || categories.length === 0) {

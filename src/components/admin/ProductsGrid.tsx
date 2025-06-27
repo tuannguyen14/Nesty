@@ -17,10 +17,6 @@ export default function ProductsGrid({ products, onEdit, onDelete, onAddProduct 
         }).format(price);
     };
 
-    const formatDate = (dateString: string) => {
-        return new Date(dateString).toLocaleDateString('vi-VN');
-    };
-
     const getTotalStock = (product: ProductWithDetails) => {
         if (!product.variants || product.variants.length === 0) return 0;
         return product.variants.reduce((sum, variant) => sum + variant.stock, 0);
@@ -33,7 +29,6 @@ export default function ProductsGrid({ products, onEdit, onDelete, onAddProduct 
         const now = new Date();
         const start = new Date(product.discount_start);
         const end = new Date(product.discount_end);
-        console
         return now.getTime() >= start.getTime() && now.getTime() <= end.getTime() && product.discount_price < product.price;
     };
 

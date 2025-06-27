@@ -76,7 +76,7 @@ Trong trường hợp máy chủ lưu trữ thông tin bị hacker tấn công d
             </p>
           </div>
         </div>
-        
+
         {/* Decorative Elements */}
         <div className="absolute top-0 left-0 w-full h-full">
           <div className="absolute top-10 left-10 w-20 h-20 bg-white/10 rounded-full animate-float"></div>
@@ -96,8 +96,9 @@ Trong trường hợp máy chủ lưu trữ thông tin bị hacker tấn công d
             <h2 className="text-2xl font-bold text-gradient-orange">Cam kết của chúng tôi</h2>
           </div>
           <p className="text-lg text-gray-700 leading-relaxed">
-            Nesty cam kết sẽ bảo mật những thông tin mang tính riêng tư của bạn. Bạn vui lòng đọc bản "Chính sách bảo mật" dưới đây để hiểu hơn những cam kết mà chúng tôi thực hiện, nhằm tôn trọng và bảo vệ quyền lợi của người truy cập.
+            Nesty cam kết sẽ bảo mật những thông tin mang tính riêng tư của bạn. Bạn vui lòng đọc bản &quot;Chính sách bảo mật&quot; dưới đây để hiểu hơn những cam kết mà chúng tôi thực hiện, nhằm tôn trọng và bảo vệ quyền lợi của người truy cập.
           </p>
+
         </div>
 
         {/* Policy Sections */}
@@ -111,7 +112,7 @@ Trong trường hợp máy chủ lưu trữ thông tin bị hacker tấn công d
                   </div>
                   <div>
                     <span className="text-sm font-semibold text-orange-600 mb-1 block">
-                      {index + 1}. 
+                      {index + 1}.
                     </span>
                     <h3 className="text-xl font-bold text-gray-800">
                       {section.title}

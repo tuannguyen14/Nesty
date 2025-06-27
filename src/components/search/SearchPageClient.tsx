@@ -153,7 +153,7 @@ export function SearchPageClient({
             <h1 className="text-3xl font-bold text-gray-800">
               Kết quả tìm kiếm
               {searchQuery && (
-                <span className="text-orange-600"> "{searchQuery}"</span>
+                <span className="text-orange-600"> &quot;{searchQuery}&quot;</span>
               )}
             </h1>
           </div>

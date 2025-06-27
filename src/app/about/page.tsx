@@ -2,7 +2,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Heart, ShoppingCart, Users, Star, Award, Truck, Shield, Headphones, ArrowRight, CheckCircle } from 'lucide-react';
+import { Heart, ShoppingCart, Users, Star, Award, Truck, Shield, Headphones, CheckCircle } from 'lucide-react';
 
 type TabKey = 'mission' | 'vision' | 'team';
 

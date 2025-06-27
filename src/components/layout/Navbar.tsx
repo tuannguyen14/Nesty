@@ -14,7 +14,7 @@ import { MenuType } from '@/types/menuType';
 import OverlayLoading from "@/components/loading/OverlayLoading";
 
 export default function Navbar() {
-    const { user, loading, logout } = useAuth();
+    const { user, loading: userLoading, logout } = useAuth();
     const { totalItems, loading: cartLoading } = useCart(); // Sử dụng Global Cart Context
 
     const [categories, setCategories] = useState<Category[]>([]);
@@ -27,6 +27,8 @@ export default function Navbar() {
     });
     const [searchQuery, setSearchQuery] = useState('');
     const [isScrolled, setIsScrolled] = useState(false);
+
+    const [loading, setLoading] = useState(false);
 
     // Handle scroll effect
     useEffect(() => {
@@ -87,9 +89,15 @@ export default function Navbar() {
     }, []);
 
     const handleSearch = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (searchQuery.trim()) {
-            window.location.href = `/search?q=${encodeURIComponent(searchQuery)}`;
+        try {
+            setLoading(true);
+            e.preventDefault();
+            if (searchQuery.trim()) {
+                window.location.href = `/search?q=${encodeURIComponent(searchQuery)}`;
+            }
+        } catch (error) {
+            console.error("Handle search error: ", error);
+            setLoading(false);
         }
     };
 
@@ -261,7 +269,7 @@ export default function Navbar() {
                                 {/* User Dropdown */}
                                 {menuStates[MenuType.ACCOUNT] && (
                                     <div className="absolute top-full right-0 mt-2 w-56 bg-white rounded-2xl shadow-2xl py-2 z-50 border border-orange-100 overflow-hidden">
-                                        {!loading ? (
+                                        {!userLoading ? (
                                             user ? (
                                                 <>
                                                     <div className="px-4 py-3 border-b border-orange-100">
@@ -498,7 +506,7 @@ export default function Navbar() {
             )}
 
             <OverlayLoading
-                isVisible={loading}
+                isVisible={userLoading || loading || cartLoading || categoriesLoading}
                 message="Đang xử lý yêu cầu của bạn..."
             />
         </>
