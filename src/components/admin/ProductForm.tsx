@@ -930,7 +930,7 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
                         </div>
                     ) : (
                         <p className="text-gray-500 text-sm">
-                            Chưa có biến thể. Hãy thêm phân loại hàng và nhấn "Tạo biến thể" hoặc thêm biến thể thủ công.
+                            Chưa có biến thể. Hãy thêm phân loại hàng và nhấn &quot;Tạo biến thể&quot; hoặc thêm biến thể thủ công.
                         </p>
                     )}
                 </div>
