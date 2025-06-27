@@ -9,9 +9,16 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 
 import { Category } from '@/types/category';
-import { MenuType } from '@/types/menuType';
 
 import OverlayLoading from "@/components/loading/OverlayLoading";
+
+enum MenuType {
+    CATEGORY = 'category',
+    ACCOUNT = 'account',
+    MOBILE = 'mobile',
+    SEARCH = 'search'
+}
+
 
 export default function Navbar() {
     const { user, loading: userLoading, logout } = useAuth();
@@ -506,7 +513,7 @@ export default function Navbar() {
             )}
 
             <OverlayLoading
-                isVisible={userLoading || loading ||cartLoading || categoriesLoading}
+                isVisible={userLoading || loading || cartLoading || categoriesLoading}
                 message="Đang xử lý yêu cầu của bạn..."
             />
         </>
