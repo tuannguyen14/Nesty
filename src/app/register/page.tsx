@@ -546,7 +546,7 @@ export default function RegisterPage() {
                             </div>
                         </div>
 
-                        <div className="space-y-3">
+                        {/* <div className="space-y-3">
                             <Button
                                 type="button"
                                 variant="outline"
@@ -575,7 +575,7 @@ export default function RegisterPage() {
                                 </svg>
                                 Đăng ký với Facebook
                             </Button>
-                        </div>
+                        </div> */}
 
                         <div className="text-center space-y-2">
                             <p className="text-sm text-gray-600">
