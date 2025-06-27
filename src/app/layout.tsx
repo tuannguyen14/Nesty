@@ -11,6 +11,17 @@ import {
 } from '@/components/ui/ClientErrorBoundary';
 import ContactButtons from '@/components/ui/ContactButtons';
 
+export const metadata = {
+  title: {
+    default: 'Nesty',
+    template: '%s | Nesty',
+  },
+  description: 'Cửa hàng dép thời trang Nesty - Chất lượng, giá tốt.',
+  icons: {
+    icon: '/favicon.ico',
+  },
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{

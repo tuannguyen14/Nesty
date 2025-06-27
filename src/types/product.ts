@@ -1,6 +1,6 @@
 // types/product.ts
 export interface Category {
-  id: number;         
+  id: number;
   name: string;
   slug: string;
   description?: string;
@@ -35,6 +35,7 @@ export interface ProductVariant {
   size?: string;        // Thêm ? vì có thể null trong DB
   price_override?: number;
   stock: number;
+  sku: string;
   // Bỏ created_at, updated_at vì không có trong DB
 }
 
@@ -45,6 +46,7 @@ export interface ProductWithDetails extends Product {
   totalStock?: number;
   availableColors?: string[];
   availableSizes?: string[];
+  sku: string;
 }
 
 // Sửa lại để khớp với DB
@@ -81,6 +83,7 @@ export interface CreateProductData {
     size?: string;      // Thêm ? vì có thể null
     price_override?: number;
     stock: number;
+    sku: string;
   }>;
 }
 

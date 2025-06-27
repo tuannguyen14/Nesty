@@ -25,11 +25,13 @@ export function getColorStyle(color: string): string {
     'brown': '#a3a3a3',
     'xám': '#6b7280',
     'gray': '#6b7280',
-    'grey': '#6b7280'
+    'grey': '#6b7280',
+    'kem': '#FFFDD0',
+    'cream': '#FFFDD0'
   };
 
   const normalizedColor = color.toLowerCase().trim();
-  
+
   // Try exact match first
   if (colorMap[normalizedColor]) {
     return colorMap[normalizedColor];

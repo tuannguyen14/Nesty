@@ -11,9 +11,16 @@ interface ProductFormProps {
     onCancel: () => void;
 }
 
+interface Classification {
+    type: 'color' | 'size' | '';
+    values: string[];
+}
+
 export default function ProductForm({ product, categories, onSuccess, onCancel }: ProductFormProps) {
     const [loading, setLoading] = useState(false);
     const [uploadingImages, setUploadingImages] = useState<{ [key: number]: boolean }>({});
+    const [classification1, setClassification1] = useState<Classification>({ type: '', values: [] });
+    const [classification2, setClassification2] = useState<Classification>({ type: '', values: [] });
     const [formData, setFormData] = useState<CreateProductData>({
         name: '',
         description: '',
@@ -25,7 +32,6 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
         images: [],
         variants: []
     });
-    
 
     useEffect(() => {
         if (product) {
@@ -45,9 +51,30 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
                     color: variant.color,
                     size: variant.size,
                     price_override: variant.price_override || 0,
-                    stock: variant.stock
+                    stock: variant.stock,
+                    sku: variant.sku || ''
                 }))
             });
+
+            // Try to detect existing classifications
+            if (product.variants.length > 0) {
+                const hasColors = product.variants.some(v => v.color);
+                const hasSizes = product.variants.some(v => v.size);
+
+                if (hasColors) {
+                    const colors = [...new Set(product.variants.map(v => v.color).filter((c): c is string => !!c))];
+                    setClassification1({ type: 'color', values: colors });
+                }
+
+                if (hasSizes) {
+                    const sizes = [...new Set(product.variants.map(v => v.size).filter((s): s is string => !!s))];
+                    if (hasColors) {
+                        setClassification2({ type: 'size', values: sizes });
+                    } else {
+                        setClassification1({ type: 'size', values: sizes });
+                    }
+                }
+            }
         }
     }, [product]);
 
@@ -121,57 +148,148 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
         }
     };
 
-    const handleImageUpload = async (index: number, file: File) => {
-        if (!file) return;
+    const handleMultipleImageUpload = async (files: FileList) => {
+        const fileArray = Array.from(files);
 
-        console.log(`Starting upload for index ${index}:`, file.name, file.size, file.type);
+        for (let i = 0; i < fileArray.length; i++) {
+            const file = fileArray[i];
+            const index = formData.images.length + i;
 
-        try {
-            // Set loading state
-            setUploadingImages(prev => ({ ...prev, [index]: true }));
+            // Add placeholder for new image
+            setFormData(prev => ({
+                ...prev,
+                images: [...prev.images, { image_url: '', sort_order: index + 1 }]
+            }));
 
             // Upload image
-            const url = await uploadImageToBucket(file);
+            try {
+                setUploadingImages(prev => ({ ...prev, [index]: true }));
+                const url = await uploadImageToBucket(file);
 
-            // Update form data
-            updateImage(index, 'image_url', url);
+                // Update with uploaded URL
+                setFormData(prev => ({
+                    ...prev,
+                    images: prev.images.map((img, idx) =>
+                        idx === index ? { ...img, image_url: url } : img
+                    )
+                }));
+            } catch (error: any) {
+                console.error(`Upload failed for image ${i + 1}:`, error);
+                alert(`Lỗi upload hình ${i + 1}: ${error.message}`);
 
-            console.log(`Upload completed for index ${index}:`, url);
-
-        } catch (error: any) {
-            console.error(`Upload failed for index ${index}:`, error);
-
-            // Show user-friendly error message
-            let errorMessage = 'Lỗi không xác định';
-
-            if (error.message.includes('timeout')) {
-                errorMessage = 'Upload quá chậm, vui lòng thử lại';
-            } else if (error.message.includes('File quá lớn')) {
-                errorMessage = 'File quá lớn (tối đa 5MB)';
-            } else if (error.message.includes('Định dạng file')) {
-                errorMessage = 'Định dạng file không hỗ trợ';
-            } else if (error.message.includes('insufficient_scope') || error.message.includes('permission')) {
-                errorMessage = 'Không có quyền upload. Vui lòng liên hệ admin';
-            } else {
-                errorMessage = error.message || 'Upload thất bại';
+                // Remove failed placeholder
+                setFormData(prev => ({
+                    ...prev,
+                    images: prev.images.filter((_, idx) => idx !== index)
+                }));
+            } finally {
+                setUploadingImages(prev => {
+                    const newState = { ...prev };
+                    delete newState[index];
+                    return newState;
+                });
             }
+        }
+    };
 
-            alert(`Upload hình ảnh thất bại: ${errorMessage}`);
+    function removeVietnameseTones(str: string) {
+        return str
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/đ/g, "d")
+            .replace(/Đ/g, "D").toLocaleLowerCase();
+    }
 
-            // Clear the file input
-            const fileInput = document.querySelector(`input[type="file"][data-index="${index}"]`) as HTMLInputElement;
-            if (fileInput) {
-                fileInput.value = '';
-            }
+    const generateVariants = () => {
+        const variants: any[] = [];
 
-        } finally {
-            // Always reset loading state
-            setUploadingImages(prev => {
-                const newState = { ...prev };
-                delete newState[index];
-                return newState;
+        if (!classification1.type || classification1.values.length === 0) {
+            return;
+        }
+
+        if (classification2.type && classification2.values.length > 0) {
+            // Two classifications
+            classification1.values.forEach(value1 => {
+                classification2.values.forEach(value2 => {
+                    const variant: any = {
+                        stock: 0,
+                        price_override: 0,
+                        sku: ''
+                    };
+
+                    if (classification1.type === 'color') {
+                        variant.color = value1;
+                        variant.size = value2;
+                        variant.sku = `${removeVietnameseTones(value1)}-${removeVietnameseTones(value2)}`;
+                    } else {
+                        variant.size = value1;
+                        variant.color = value2;
+                        variant.sku = `${removeVietnameseTones(value1)}-${removeVietnameseTones(value2)}`;
+                    }
+
+                    variants.push(variant);
+                });
+            });
+        } else {
+            // Single classification
+            classification1.values.forEach(value => {
+                const variant: any = {
+                    stock: 0,
+                    price_override: 0,
+                    sku: value
+                };
+
+                if (classification1.type === 'color') {
+                    variant.color = value;
+                    variant.size = '';
+                } else {
+                    variant.size = value;
+                    variant.color = '';
+                }
+
+                variants.push(variant);
             });
         }
+
+        setFormData(prev => ({ ...prev, variants }));
+    };
+
+    const addVariant = () => {
+        setFormData(prev => ({
+            ...prev,
+            variants: [...prev.variants, { color: '', size: '', price_override: 0, stock: 0, sku: '' }]
+        }));
+    };
+
+    const removeVariant = (index: number) => {
+        setFormData(prev => ({
+            ...prev,
+            variants: prev.variants.filter((_, i) => i !== index)
+        }));
+    };
+
+    const addClassificationValue = (classificationNumber: 1 | 2) => {
+        const setter = classificationNumber === 1 ? setClassification1 : setClassification2;
+        setter(prev => ({
+            ...prev,
+            values: [...prev.values, '']
+        }));
+    };
+
+    const updateClassificationValue = (classificationNumber: 1 | 2, index: number, value: string) => {
+        const setter = classificationNumber === 1 ? setClassification1 : setClassification2;
+        setter(prev => ({
+            ...prev,
+            values: prev.values.map((v, i) => i === index ? value : v)
+        }));
+    };
+
+    const removeClassificationValue = (classificationNumber: 1 | 2, index: number) => {
+        const setter = classificationNumber === 1 ? setClassification1 : setClassification2;
+        setter(prev => ({
+            ...prev,
+            values: prev.values.filter((_, i) => i !== index)
+        }));
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -252,7 +370,8 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
                     color: variant.color || null,
                     size: variant.size || null,
                     price_override: variant.price_override || null,
-                    stock: variant.stock || 0
+                    stock: variant.stock || 0,
+                    sku: variant.sku || null
                 }));
 
                 console.log('Inserting variants:', variantsData);
@@ -346,7 +465,8 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
                     color: variant.color || null,
                     size: variant.size || null,
                     price_override: variant.price_override || null,
-                    stock: variant.stock || 0
+                    stock: variant.stock || 0,
+                    sku: variant.sku || null
                 }));
 
                 const { error: variantsError } = await supabase
@@ -367,13 +487,6 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
         }
     };
 
-    const addImage = () => {
-        setFormData(prev => ({
-            ...prev,
-            images: [...prev.images, { image_url: '', sort_order: prev.images.length + 1 }]
-        }));
-    };
-
     const removeImage = (index: number) => {
         setFormData(prev => ({
             ...prev,
@@ -391,20 +504,6 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
         setFormData(prev => ({
             ...prev,
             images: prev.images.map((img, i) => i === index ? { ...img, [field]: value } : img)
-        }));
-    };
-
-    const addVariant = () => {
-        setFormData(prev => ({
-            ...prev,
-            variants: [...prev.variants, { color: '', size: '', price_override: 0, stock: 0 }]
-        }));
-    };
-
-    const removeVariant = (index: number) => {
-        setFormData(prev => ({
-            ...prev,
-            variants: prev.variants.filter((_, i) => i !== index)
         }));
     };
 
@@ -528,104 +627,206 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
                 <div>
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="text-lg font-medium text-gray-900">Hình ảnh</h3>
-                        <button
-                            type="button"
-                            onClick={addImage}
-                            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-                        >
-                            Thêm hình ảnh
-                        </button>
+                        <div>
+                            <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                onChange={(e) => {
+                                    const files = e.target.files;
+                                    if (files && files.length > 0) {
+                                        handleMultipleImageUpload(files);
+                                    }
+                                }}
+                                className="hidden"
+                                id="image-upload"
+                            />
+                            <label
+                                htmlFor="image-upload"
+                                className="
+                                    inline-flex items-center justify-center
+                                    px-4 py-2 
+                                    bg-green-600 text-white 
+                                    rounded-md 
+                                    hover:bg-green-700 
+                                    cursor-pointer
+                                    font-medium
+                                "
+                            >
+                                Chọn nhiều hình ảnh
+                            </label>
+                        </div>
                     </div>
 
-                     {/* Trong phần render images của ProductForm */}
-                    {formData.images.map((image, index) => (
-                        <div key={index} className="flex gap-4 items-center mb-4 p-4 border rounded-md">
-                            {/* Preview */}
-                            {image.image_url && (
-                                <img
-                                    src={image.image_url}
-                                    alt="preview"
-                                    className="w-16 h-16 object-cover rounded"
-                                    onError={(e) => {
-                                        console.error('Image load error:', e);
-                                        (e.target as HTMLImageElement).style.display = 'none';
-                                    }}
-                                />
-                            )}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {formData.images.map((image, index) => (
+                            <div key={index} className="relative">
+                                {uploadingImages[index] ? (
+                                    <div className="aspect-square bg-gray-100 rounded-lg flex items-center justify-center">
+                                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                                    </div>
+                                ) : image.image_url ? (
+                                    <div className="relative group">
+                                        <div className="aspect-square overflow-hidden rounded-lg bg-gray-100">
+                                            <img
+                                                src={image.image_url}
+                                                alt={`Product ${index + 1}`}
+                                                className="w-full h-full object-cover"
+                                            />
+                                        </div>
 
-                            {/* Upload file */}
-                            <div className="flex-1">
-                                <input
-                                    type="file"
-                                    accept="image/*"
-                                    data-index={index}
-                                    disabled={uploadingImages[index]}
-                                    onChange={(e) => {
-                                        const file = e.target.files?.[0];
-                                        if (file) {
-                                            handleImageUpload(index, file);
-                                        }
-                                    }}
-                                    className="w-full disabled:opacity-50 disabled:cursor-not-allowed"
-                                />
-
-                                {/* Loading indicator */}
-                                {uploadingImages[index] && (
-                                    <div className="flex items-center mt-2">
-                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
-                                        <span className="text-sm text-blue-600">
-                                            Đang upload...
-                                        </span>
+                                        {/* Nút xóa - đặt ở góc trên phải */}
                                         <button
                                             type="button"
-                                            onClick={() => {
-                                                // Force reset loading state
-                                                setUploadingImages(prev => {
-                                                    const newState = { ...prev };
-                                                    delete newState[index];
-                                                    return newState;
-                                                });
-                                            }}
-                                            className="ml-2 text-xs text-red-600 hover:text-red-800"
+                                            onClick={() => removeImage(index)}
+                                            className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 bg-red-600 text-white p-1.5 rounded-full hover:bg-red-700 transition-all duration-200 shadow-lg"
                                         >
-                                            Hủy
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+
+                                        {/* Input số thứ tự */}
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            value={image.sort_order}
+                                            onChange={(e) => updateImage(index, 'sort_order', Number(e.target.value))}
+                                            className="absolute bottom-2 left-2 w-12 px-2 py-1 text-xs border border-gray-300 rounded bg-white shadow-sm"
+                                            placeholder="STT"
+                                        />
+                                    </div>
+                                ) : null}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Product Classifications */}
+                <div className="border-t pt-6">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">Phân loại hàng</h3>
+
+                    {/* Classification 1 */}
+                    <div className="mb-6">
+                        <div className="flex items-center gap-4 mb-3">
+                            <label className="text-sm font-medium text-gray-700">Phân loại 1:</label>
+                            <select
+                                value={classification1.type}
+                                onChange={(e) => {
+                                    const newType = e.target.value as 'color' | 'size' | '';
+                                    setClassification1({ type: newType, values: [] });
+                                    if (classification2.type === newType) {
+                                        setClassification2({ type: '', values: [] });
+                                    }
+                                }}
+                                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                                <option value="">Không sử dụng</option>
+                                <option value="color">Màu sắc</option>
+                                <option value="size">Kích thước</option>
+                            </select>
+                            {classification1.type && (
+                                <button
+                                    type="button"
+                                    onClick={() => addClassificationValue(1)}
+                                    className="px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+                                >
+                                    Thêm {classification1.type === 'color' ? 'màu' : 'size'}
+                                </button>
+                            )}
+                        </div>
+
+                        {classification1.type && (
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                {classification1.values.map((value, index) => (
+                                    <div key={index} className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={value}
+                                            onChange={(e) => updateClassificationValue(1, index, e.target.value)}
+                                            placeholder={classification1.type === 'color' ? 'Vd: Đỏ' : 'Vd: XL hoặc 21'}
+                                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => removeClassificationValue(1, index)}
+                                            className="px-2 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
                                         </button>
                                     </div>
-                                )}
+                                ))}
+                            </div>
+                        )}
+                    </div>
 
-                                {/* URL display */}
-                                {image.image_url && !uploadingImages[index] && (
-                                    <input
-                                        type="text"
-                                        value={image.image_url}
-                                        readOnly
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md mt-2 bg-gray-50 text-sm"
-                                    />
+                    {/* Classification 2 */}
+                    {classification1.type && (
+                        <div className="mb-6">
+                            <div className="flex items-center gap-4 mb-3">
+                                <label className="text-sm font-medium text-gray-700">Phân loại 2:</label>
+                                <select
+                                    value={classification2.type}
+                                    onChange={(e) => {
+                                        const newType = e.target.value as 'color' | 'size' | '';
+                                        setClassification2({ type: newType, values: [] });
+                                    }}
+                                    className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                    <option value="">Không sử dụng</option>
+                                    {classification1.type !== 'color' && <option value="color">Màu sắc</option>}
+                                    {classification1.type !== 'size' && <option value="size">Kích thước</option>}
+                                </select>
+                                {classification2.type && (
+                                    <button
+                                        type="button"
+                                        onClick={() => addClassificationValue(2)}
+                                        className="px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+                                    >
+                                        Thêm {classification2.type === 'color' ? 'màu' : 'size'}
+                                    </button>
                                 )}
                             </div>
 
-                            <div className="w-24">
-                                <input
-                                    type="number"
-                                    placeholder="Thứ tự"
-                                    min="1"
-                                    value={image.sort_order}
-                                    onChange={(e) => updateImage(index, 'sort_order', Number(e.target.value))}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    disabled={uploadingImages[index]}
-                                />
-                            </div>
-
-                            <button
-                                type="button"
-                                onClick={() => removeImage(index)}
-                                disabled={uploadingImages[index]}
-                                className="px-3 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                Xóa
-                            </button>
+                            {classification2.type && (
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                    {classification2.values.map((value, index) => (
+                                        <div key={index} className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                value={value}
+                                                onChange={(e) => updateClassificationValue(2, index, e.target.value)}
+                                                placeholder={classification2.type === 'color' ? 'Vd: Đỏ' : 'Vd: XL hoặc 21'}
+                                                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => removeClassificationValue(2, index)}
+                                                className="px-2 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
-                    ))}
+                    )}
+
+                    {/* Generate Variants Button */}
+                    {classification1.type && classification1.values.length > 0 && (
+                        <button
+                            type="button"
+                            onClick={generateVariants}
+                            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                        >
+                            Tạo biến thể
+                        </button>
+                    )}
                 </div>
 
                 {/* Variants */}
@@ -641,62 +842,101 @@ export default function ProductForm({ product, categories, onSuccess, onCancel }
                         </button>
                     </div>
 
-                    {formData.variants.map((variant, index) => (
-                        <div key={index} className="grid grid-cols-1 md:grid-cols-5 gap-4 items-center mb-4 p-4 border rounded-md">
-                            <div>
-                                <div>Màu sắc</div>
-                                <input
-                                    type="text"
-                                    value={variant.color}
-                                    onChange={(e) => updateVariant(index, 'color', e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                            </div>
-                            <div>
-                                <div>Size</div>
-                                <input
-                                    type="text"
-                                    value={variant.size}
-                                    onChange={(e) => updateVariant(index, 'size', e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                            </div>
-                            <div>
-                                <div>Tồn kho</div>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    value={variant.stock}
-                                    onChange={(e) => updateVariant(index, 'stock', Number(e.target.value))}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                            </div>
-
-                            <div>
-                                <div>Giá</div>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    value={variant.price_override}
-                                    onChange={(e) => updateVariant(index, 'price_override', Number(e.target.value))}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                            </div>
-                            <div>
-                                <button
-                                    type="button"
-                                    onClick={() => removeVariant(index)}
-                                    className="w-full px-3 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-                                >
-                                    Xóa
-                                </button>
-                            </div>
+                    {formData.variants.length > 0 ? (
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-50">
+                                    <tr>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                            SKU
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                            Màu sắc
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                            Kích thước
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                            Giá
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                            Tồn kho
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                            Hành động
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                    {formData.variants.map((variant, index) => (
+                                        <tr key={index}>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <input
+                                                    type="text"
+                                                    value={variant.sku || ''}
+                                                    onChange={(e) => updateVariant(index, 'sku', e.target.value)}
+                                                    className="w-full px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                />
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <input
+                                                    type="text"
+                                                    value={variant.color || ''}
+                                                    onChange={(e) => updateVariant(index, 'color', e.target.value)}
+                                                    className="w-full px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                />
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <input
+                                                    type="text"
+                                                    value={variant.size || ''}
+                                                    onChange={(e) => updateVariant(index, 'size', e.target.value)}
+                                                    className="w-full px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                />
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    step="0.01"
+                                                    value={variant.price_override}
+                                                    onChange={(e) => updateVariant(index, 'price_override', Number(e.target.value))}
+                                                    placeholder="0 = giá gốc"
+                                                    className="w-24 px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                />
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    value={variant.stock}
+                                                    onChange={(e) => updateVariant(index, 'stock', Number(e.target.value))}
+                                                    className="w-20 px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                />
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeVariant(index)}
+                                                    className="px-2 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 text-sm"
+                                                >
+                                                    Xóa
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
-                    ))}
+                    ) : (
+                        <p className="text-gray-500 text-sm">
+                            Chưa có biến thể. Hãy thêm phân loại hàng và nhấn "Tạo biến thể" hoặc thêm biến thể thủ công.
+                        </p>
+                    )}
                 </div>
 
                 {/* Form Actions */}
-                <div className="flex gap-4 pt-6">
+                <div className="flex gap-4 pt-6 border-t">
                     <button
                         type="submit"
                         disabled={loading || Object.values(uploadingImages).some(Boolean)}

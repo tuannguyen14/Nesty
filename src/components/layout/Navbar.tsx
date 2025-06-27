@@ -150,7 +150,7 @@ export default function Navbar() {
                     <div className="flex justify-between items-center py-3">
                         {/* Logo */}
                         <Link href="/" className="flex items-center space-x-2 group">
-                            <div className="bg-gradient-to-br from-orange-400 to-orange-600 p-2.5 rounded-2xl shadow-lg group-hover:shadow-xl transition-all duration-300 group-hover:scale-105">
+                            <div className="bg-gradient-to-br from-orange-400 to-orange-600 p-0.5 rounded-2xl shadow-lg group-hover:shadow-xl transition-all duration-300 group-hover:scale-105">
                                 <div className="bg-white p-2 rounded-xl">
                                     <Image
                                         src="/logo/logo.png"
