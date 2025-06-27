@@ -16,8 +16,9 @@ const eslintConfig = [
     rules: {
       "@typescript-eslint/no-explicit-any": "off", // hoặc "off", "warn"
       "no-unused-vars": "off",
-      "@typescript-eslint/no-unused-vars": "off"
-    },
+      "@typescript-eslint/no-unused-vars": "off",
+      'import/no-unresolved': ['error', { caseSensitive: true }]
+    }
   },
 ];
 
