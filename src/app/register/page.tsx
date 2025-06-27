@@ -284,7 +284,7 @@ export default function RegisterPage() {
                                 </div>
                                 <div>
                                     <p className="font-semibold text-gray-800">Quà tặng chào mừng</p>
-                                    <p className="text-sm text-gray-600">Voucher 100k cho đơn hàng đầu tiên</p>
+                                    <p className="text-sm text-gray-600">Voucher cho đơn hàng đầu tiên</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-3">

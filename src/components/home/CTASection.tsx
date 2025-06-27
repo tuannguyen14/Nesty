@@ -1,12 +1,6 @@
-'use client';
-
-import { Button } from "@/components/ui/button";
-import { MessageCircle, Headphones, Phone } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { Headphones } from 'lucide-react';
 
 export function CTASection() {
-  const router = useRouter();
-
   return (
     <section className="relative px-4 py-20 overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-br from-orange-500 via-orange-600 to-amber-600"></div>

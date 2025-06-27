@@ -7,7 +7,7 @@ import dynamic from 'next/dynamic';
 import { ProductWithRelations } from "@/types/product";
 import { useCart } from '@/contexts/CartProvider';
 import { useAuth } from "@/hooks/useAuth";
-import OverlayLoading from '@/components/loading/OverlayLoading'; // Import OverlayLoading
+import OverlayLoading from '@/components/loading/OverlayLoading';
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,8 @@ const Lightbox = dynamic(() => import("yet-another-react-lightbox"), {
     ssr: false,
     loading: () => <div>Loading...</div>
 });
+
+import "yet-another-react-lightbox/styles.css";
 
 interface ProductDetailClientProps {
     product: ProductWithRelations;
@@ -366,6 +368,10 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
         setLightboxOpen(true);
     }, []);
 
+    const handleLightboxClose = useCallback(() => {
+        setLightboxOpen(false);
+    }, []);
+
     // Component render starts here...
     return (
         <div className="min-h-screen bg-gradient-to-b from-orange-50/30 via-white to-orange-50/30">
@@ -467,7 +473,7 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                                             }`}
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            handleWishlist(); // Sử dụng handler mới
+                                            handleWishlist();
                                         }}
                                         disabled={isWishlistLoading}
                                     >
@@ -524,9 +530,9 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                                         <Star key={i} className="w-5 h-5 fill-current" />
                                     ))}
                                 </div>
-                                <span className="text-sm text-gray-600 font-medium">(148 đánh giá)</span>
+                                <span className="text-sm text-gray-600 font-medium">(0 đánh giá)</span>
                                 <Separator orientation="vertical" className="h-4" />
-                                <span className="text-sm text-gray-600">Đã bán: 523</span>
+                                {/* <span className="text-sm text-gray-600">Đã bán: 523</span> */}
                             </div>
                         </div>
 
@@ -590,10 +596,10 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                                                     variant="outline"
                                                     disabled={!isAvailable}
                                                     className={`px-4 py-2 rounded-2xl border-2 transition-all duration-200 hover:scale-105 ${selectedColor === color
-                                                            ? 'border-orange-500 bg-orange-50 text-orange-600'
-                                                            : isAvailable
-                                                                ? 'hover:border-orange-500 hover:bg-orange-50'
-                                                                : 'opacity-50 cursor-not-allowed border-gray-200 text-gray-400'
+                                                        ? 'border-orange-500 bg-orange-50 text-orange-600'
+                                                        : isAvailable
+                                                            ? 'hover:border-orange-500 hover:bg-orange-50'
+                                                            : 'opacity-50 cursor-not-allowed border-gray-200 text-gray-400'
                                                         }`}
                                                     onClick={() => handleColorSelect(color)}
                                                 >
@@ -640,10 +646,10 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                                                     variant="outline"
                                                     disabled={!isAvailable}
                                                     className={`h-12 rounded-2xl border-2 transition-all duration-200 hover:scale-105 font-medium relative ${selectedSize === size
-                                                            ? 'border-orange-500 bg-orange-50 text-orange-600'
-                                                            : isAvailable
-                                                                ? 'hover:border-orange-500 hover:bg-orange-50'
-                                                                : 'opacity-50 cursor-not-allowed border-gray-200 text-gray-400'
+                                                        ? 'border-orange-500 bg-orange-50 text-orange-600'
+                                                        : isAvailable
+                                                            ? 'hover:border-orange-500 hover:bg-orange-50'
+                                                            : 'opacity-50 cursor-not-allowed border-gray-200 text-gray-400'
                                                         }`}
                                                     onClick={() => handleSizeSelect(size)}
                                                 >
@@ -717,8 +723,8 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
 
                         {/* Stock Status */}
                         <Card className={`p-4 rounded-2xl border-0 shadow-md ${computedValues.isOutOfStock()
-                                ? 'bg-gradient-to-r from-red-50 to-red-100'
-                                : 'bg-gradient-to-r from-green-50 to-emerald-50'
+                            ? 'bg-gradient-to-r from-red-50 to-red-100'
+                            : 'bg-gradient-to-r from-green-50 to-emerald-50'
                             }`}>
                             <div className="flex items-center gap-3">
                                 <Package className={`w-5 h-5 ${computedValues.isOutOfStock() ? 'text-red-600' : 'text-green-600'}`} />
@@ -751,8 +757,8 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                                     size="lg"
                                     variant="outline"
                                     className={`h-14 text-base font-semibold rounded-2xl border-2 transition-all duration-300 hover:scale-105 ${addedToCart
-                                            ? 'border-green-500 bg-green-50 text-green-600'
-                                            : 'border-orange-300 text-orange-600 hover:bg-orange-50 hover:border-orange-400'
+                                        ? 'border-green-500 bg-green-50 text-green-600'
+                                        : 'border-orange-300 text-orange-600 hover:bg-orange-50 hover:border-orange-400'
                                         }`}
                                     disabled={!computedValues.canAddToCart()}
                                     onClick={handleAddToCart}
@@ -853,7 +859,7 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                                 Thông số kỹ thuật
                             </TabsTrigger>
                             <TabsTrigger value="reviews" className="rounded-xl font-medium data-[state=active]:bg-white data-[state=active]:text-orange-600 data-[state=active]:shadow-md">
-                                Đánh giá (148)
+                                Đánh giá
                             </TabsTrigger>
                         </TabsList>
 
@@ -988,18 +994,28 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
             </div>
 
             {/* Lightbox */}
-            {lightboxOpen && (
+            {lightboxOpen && lightboxSlides.length > 0 && (
                 <Lightbox
                     open={lightboxOpen}
-                    close={() => setLightboxOpen(false)}
+                    close={handleLightboxClose}
                     index={lightboxIndex}
                     slides={lightboxSlides}
                     carousel={{
-                        finite: sortedImages.length <= 1,
+                        finite: lightboxSlides.length <= 1,
+                        preload: 2,
                     }}
                     render={{
-                        buttonPrev: sortedImages.length <= 1 ? () => null : undefined,
-                        buttonNext: sortedImages.length <= 1 ? () => null : undefined,
+                        buttonPrev: lightboxSlides.length <= 1 ? () => null : undefined,
+                        buttonNext: lightboxSlides.length <= 1 ? () => null : undefined,
+                    }}
+                    animation={{
+                        fade: 300,
+                        swipe: 300,
+                    }}
+                    controller={{
+                        closeOnBackdropClick: true,
+                        closeOnPullDown: true,
+                        closeOnPullUp: true,
                     }}
                 />
             )}

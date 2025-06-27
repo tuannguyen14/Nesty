@@ -14,50 +14,35 @@ export function HeroSection() {
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-orange-300/20 rounded-full blur-3xl animate-pulse"></div>
         <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-amber-300/20 rounded-full blur-3xl animate-pulse delay-1000"></div>
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-orange-200/20 rounded-full blur-3xl animate-pulse delay-500"></div>
-        
-        {/* Floating Elements */}
-        <div className="absolute top-20 left-10 animate-float">
-          <div className="bg-white/80 backdrop-blur-sm p-3 rounded-2xl shadow-lg">
-            <ShoppingBag className="w-8 h-8 text-orange-500" />
-          </div>
-        </div>
-        <div className="absolute bottom-20 right-10 animate-float delay-1000">
-          <div className="bg-white/80 backdrop-blur-sm p-3 rounded-2xl shadow-lg">
-            <Sparkles className="w-8 h-8 text-amber-500" />
-          </div>
-        </div>
-        <div className="absolute top-1/3 right-1/4 animate-float delay-500">
-          <div className="bg-white/80 backdrop-blur-sm p-3 rounded-2xl shadow-lg">
-            <Star className="w-6 h-6 text-orange-400 fill-current" />
-          </div>
-        </div>
       </div>
 
-      <div className="relative z-10 max-w-7xl mx-auto px-4 py-20 md:py-28">
+      {/* GIẢM PADDING TOP: từ py-20 md:py-28 xuống pt-8 md:pt-12 */}
+      <div className="relative z-10 max-w-7xl mx-auto px-4 pt-8 md:pt-12 pb-20 md:pb-28">
         <div className="text-center">
-          {/* Badge */}
-          <div className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-orange-100 to-amber-100 backdrop-blur-sm rounded-full border border-orange-200 mb-8 animate-pulse-orange">
+          {/* Badge - GIẢM MARGIN BOTTOM: từ mb-8 xuống mb-4 */}
+          <div className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-orange-100 to-amber-100 backdrop-blur-sm rounded-full border border-orange-200 mb-4 animate-pulse-orange">
             <Sparkles className="w-4 h-4 mr-2 text-orange-600" />
             <span className="text-sm font-semibold text-orange-700">✨ Ưu đãi độc quyền - Giảm đến 50%</span>
           </div>
 
-          {/* Main Heading */}
-          <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold mb-6 leading-tight">
-            <span className="text-gray-800">Mua sắm thông minh</span>
+          {/* Main Heading - SỬA LINE-HEIGHT ĐỂ HIỂN THỊ DẤU TIẾNG VIỆT */}
+          <h1 className="text-3xl md:text-3xl lg:text-5xl font-bold mb-4 leading-normal md:leading-relaxed">
+            <span className="text-gray-800">Mua sắm</span>
             <br />
-            <span className="text-5xl md:text-7xl lg:text-8xl text-gradient-orange inline-block transform hover:scale-105 transition-transform duration-300">
+            <span className="text-5xl md:text-7xl lg:text-6xl text-gradient-orange inline-block transform hover:scale-105 transition-transform duration-300 py-2">
               Tiết kiệm hơn
             </span>
           </h1>
 
-          <p className="text-xl md:text-2xl mb-10 text-gray-600 max-w-3xl mx-auto leading-relaxed">
+          {/* GIẢM MARGIN BOTTOM: từ mb-10 xuống mb-6 */}
+          <p className="text-xl md:text-2xl mb-6 text-gray-600 max-w-3xl mx-auto leading-relaxed">
             Khám phá hàng ngàn sản phẩm chất lượng với giá cả tốt nhất. 
             <span className="text-orange-600 font-semibold"> Giao hàng nhanh chóng</span>, 
             <span className="text-orange-600 font-semibold"> đảm bảo chính hãng</span>
           </p>
 
-          {/* CTA Buttons */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-16">
+          {/* CTA Buttons - GIẢM MARGIN BOTTOM: từ mb-16 xuống mb-10 */}
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-10">
             <Button
               size="lg"
               onClick={() => router.push('/products')}
@@ -104,8 +89,8 @@ export function HeroSection() {
             </div>
           </div>
 
-          {/* Stats */}
-          <div className="mt-20 grid grid-cols-3 gap-8 max-w-2xl mx-auto">
+          {/* Stats - GIẢM MARGIN TOP: từ mt-20 xuống mt-12 */}
+          <div className="mt-12 grid grid-cols-3 gap-8 max-w-2xl mx-auto">
             <div className="text-center group">
               <div className="text-3xl md:text-4xl font-bold text-gradient-orange group-hover:scale-110 transition-transform">100+</div>
               <div className="text-sm text-gray-600 mt-1">Sản phẩm</div>
